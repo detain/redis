@@ -3,7 +3,6 @@
 Asynchronous Redis client for PHP, built on Workerman.
 
 [![CI](https://github.com/detain/redis/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/detain/redis/actions/workflows/ci.yml)
-[![Codecov](https://codecov.io/gh/detain/redis/branch/master/graph/badge.svg)](https://codecov.io/gh/detain/redis)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/detain/redis)](https://app.codacy.com/gh/detain/redis/dashboard)
 [![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/detain/redis)](https://app.codacy.com/gh/detain/redis/dashboard)
 [![Latest Stable Version](https://poser.pugx.org/workerman/redis/v/stable)](https://packagist.org/packages/workerman/redis)
