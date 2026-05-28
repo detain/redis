@@ -37,11 +37,13 @@ jobs:
           sudo curl -Lo /usr/share/keyrings/dragonfly-keyring.public https://packages.dragonflydb.io/pgp-key.public
           sudo curl -Lo /etc/apt/sources.list.d/dragonfly.sources https://packages.dragonflydb.io/dragonfly.sources
           sudo apt-get update
+          sudo systemctl stop redis
+          sudo apt-get remove -y --purge redis
           sudo apt-get install -y dragonfly
           sudo mkdir -p /var/run/dragonfly
           sudo chown dfly:dfly /var/run/dragonfly
           sudo -u dfly /usr/bin/dragonfly --flagfile=/etc/dragonfly/dragonfly.conf
-          sudo systemctl start dragonfly
+          echo sudo systemctl start dragonfly
           for i in {1..30}; do
             if redis-cli ping >/dev/null 2>&1; then
               echo "Dragonfly is up"
