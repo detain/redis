@@ -134,6 +134,8 @@ use Workerman\Timer;
  * @method static array zRevRange($key, $start, $end, $withScores = false, $cb = null)
  * @method static double zScore($key, $member, $cb = null)
  * @method static int zunionstore($keyOutput, $arrayZSetKeys, $arrayWeights = [], $aggregateFunction = '', $cb = null)
+ * @method static array|null zScan($key, $cursor, array $options = [], $cb = null)
+ * @method static array|false|null zScanAll($key, array $options = [], $cb = null)
  * HyperLogLogs methods
  * @method static int pfAdd($key, $values, $cb = null)
  * @method static int pfCount($keys, $cb = null)
@@ -1285,13 +1287,140 @@ class Client
     }
 
     /**
-     * zScan
+     * Incrementally iterate one sorted set one batch of member=>score pairs at a time.
      *
-     * @throws Exception
+     * Reshapes Redis's `[cursor, [m1, s1, m2, s2, ...]]` flat reply into
+     * `['cursor' => string, 'members' => ['m1' => 's1', 'm2' => 's2', ...]]`. The cursor is
+     * always a string; `'0'` signals iteration complete. Scores are kept as the raw bulk
+     * strings Redis sent — casting to float would lose precision on values that don't have
+     * an exact binary representation. Non-array replies (e.g. error strings) are passed
+     * through unchanged so callers can detect errors.
+     *
+     * @param string        $key     The sorted set key to iterate.
+     * @param string|int    $cursor  Cursor value; start with '0'.
+     * @param array         $options Recognised keys (case-insensitive): MATCH, COUNT. Unknown keys are ignored.
+     * @param callable|null $cb      function(array|mixed $reply, Client $client): void
+     * @return array|null            Coroutine mode: the formatted reply. Callback mode: null.
      */
-    public function zScan()
+    public function zScan($key, $cursor, array $options = [], $cb = null)
     {
-        throw new Exception('Not implemented');
+        $args = ['ZSCAN', $key, (string)$cursor];
+        foreach ($options as $optKey => $value) {
+            $upper = \strtoupper((string)$optKey);
+            if ($upper === 'MATCH' || $upper === 'COUNT') {
+                $args[] = $upper;
+                $args[] = $value;
+            }
+        }
+        $format = function ($result) {
+            if (!\is_array($result)) {
+                return $result;
+            }
+            $cursor = isset($result[0]) ? (string)$result[0] : '0';
+            $members = [];
+            if (isset($result[1]) && \is_array($result[1])) {
+                $current = '';
+                foreach ($result[1] as $index => $item) {
+                    if ($index % 2 === 0) {
+                        $current = $item;
+                        continue;
+                    }
+                    // Score stays as the raw bulk string — casting to float
+                    // would lose precision for non-exact-binary values.
+                    $members[$current] = $item;
+                }
+            }
+            return ['cursor' => $cursor, 'members' => $members];
+        };
+        return $this->queueCommand($args, $cb, $format);
+    }
+
+    /**
+     * Drive ZSCAN to completion and return every member=>score pair for one sorted set.
+     *
+     * Loops zScan() from cursor '0' until Redis returns '0', merging member=>score pairs
+     * across batches into a single associative array. Sorted set members are unique by
+     * definition, so a member re-yielded during a rehash simply overwrites the previous
+     * score (which is also the current score). The 'limit' option (default 100000) caps
+     * the result so a growing sorted set can't loop forever; iteration stops once the
+     * collected count reaches the limit. On a Redis-side error iteration halts and the
+     * caller receives `false` (see error()).
+     *
+     * @param string        $key     The sorted set key to iterate.
+     * @param array         $options Same keys as zScan() (MATCH, COUNT) plus 'limit' (int).
+     * @param callable|null $cb      function(array|false $members, Client $client): void
+     * @return array|false|null      Coroutine mode: aggregated member=>score array, or `false` on error. Callback mode: null.
+     */
+    public function zScanAll($key, array $options = [], $cb = null)
+    {
+        $limit = 100000;
+        $scanOptions = [];
+        foreach ($options as $optKey => $value) {
+            $upper = \strtoupper((string)$optKey);
+            if ($upper === 'LIMIT') {
+                $limit = (int)$value;
+                continue;
+            }
+            if ($upper === 'MATCH' || $upper === 'COUNT') {
+                $scanOptions[$upper] = $value;
+            }
+        }
+
+        // Coroutine mode: synchronous loop, return aggregated members.
+        if (!$cb && \class_exists(EventLoop::class, false)) {
+            $collected = [];
+            $cursor = '0';
+            do {
+                $reply = $this->zScan($key, $cursor, $scanOptions);
+                if (!\is_array($reply) || !isset($reply['cursor'])) {
+                    // zScan() failed; $this->_error already set by the
+                    // queueCommand error path. Signal abort to the caller.
+                    return false;
+                }
+                foreach ($reply['members'] as $member => $score) {
+                    $collected[$member] = $score;
+                    if (\count($collected) >= $limit) {
+                        return $collected;
+                    }
+                }
+                $cursor = $reply['cursor'];
+            } while ($cursor !== '0');
+            return $collected;
+        }
+
+        // Callback mode: chain zScan() calls via nested callbacks.
+        $collected = [];
+        $self = $this;
+        $step = null;
+        $step = function ($reply) use (&$step, &$collected, $self, $key, $scanOptions, $limit, $cb) {
+            if (!\is_array($reply) || !isset($reply['cursor'])) {
+                // zScan() errored — last error is already in $self->_error.
+                // Signal abort to the user by handing them `false`, matching
+                // the rest of the client's error convention.
+                if ($cb) {
+                    \call_user_func($cb, false, $self);
+                }
+                return;
+            }
+            foreach ($reply['members'] as $member => $score) {
+                $collected[$member] = $score;
+                if (\count($collected) >= $limit) {
+                    if ($cb) {
+                        \call_user_func($cb, $collected, $self);
+                    }
+                    return;
+                }
+            }
+            if ($reply['cursor'] === '0') {
+                if ($cb) {
+                    \call_user_func($cb, $collected, $self);
+                }
+                return;
+            }
+            $self->zScan($key, $reply['cursor'], $scanOptions, $step);
+        };
+        $this->zScan($key, '0', $scanOptions, $step);
+        return null;
     }
 
 }

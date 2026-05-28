@@ -121,6 +121,30 @@ $redis->sScanAll('user:42:tags', ['COUNT' => 200], function ($members) {
 The `limit` option (default `100000`) caps the total members collected by `sScanAll()`.
 On a Redis-side error the callback receives `false`.
 
+## ZSCAN
+
+Non-blocking iterator over a single sorted set's member=>score map. `zScan()` wraps a single
+`ZSCAN` call; `zScanAll()` drives the cursor loop and returns every member=>score pair as an
+associative array. Scores stay as the raw bulk strings Redis sent — casting to float would
+lose precision on values that don't have an exact binary representation.
+
+```php
+// One step — pass the cursor through yourself.
+$redis->zScan('leaderboard:weekly', '0', ['MATCH' => 'user:*', 'COUNT' => 100], function ($reply) {
+    // $reply === ['cursor' => '17', 'members' => ['user:42' => '1500', 'user:7' => '980', ...]]
+});
+
+// Iterator helper — collects every member=>score pair for the sorted set.
+$redis->zScanAll('leaderboard:weekly', ['COUNT' => 200], function ($members) {
+    foreach ($members as $member => $score) {
+        // $score is the raw string Redis returned — keep it that way for precision.
+    }
+});
+```
+
+The `limit` option (default `100000`) caps the total members collected by `zScanAll()`.
+On a Redis-side error the callback receives `false`.
+
 ## Development
 
 ```
