@@ -1,8 +1,8 @@
 <?php
 
 it('scan returns cursor and keys tuple', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         $prefix = 'pest:scan:t1:';
         $redis->del($prefix.'a', $prefix.'b', $prefix.'c');
         $redis->set($prefix.'a', '1');
@@ -45,8 +45,8 @@ it('scan returns cursor and keys tuple', function () {
 });
 
 it('scan with COUNT respects the hint', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         $prefix = 'pest:scan:t2:';
         $keys = array_map(fn ($i) => $prefix.'k'.$i, range(1, 50));
         $redis->del(...$keys);
@@ -76,8 +76,8 @@ it('scan with COUNT respects the hint', function () {
 });
 
 it('scan with TYPE filters to that type', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         $prefix = 'pest:scan:t3:';
         $strKey = $prefix.'str';
         $listKey = $prefix.'list';
@@ -110,8 +110,8 @@ it('scan with TYPE filters to that type', function () {
 });
 
 it('scanAll iterates the full keyspace', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         $prefix = 'pest:scanall:t4:';
         $keys = array_map(fn ($i) => $prefix.'k'.$i, range(1, 200));
         $redis->del(...$keys);
@@ -137,8 +137,8 @@ it('scanAll iterates the full keyspace', function () {
 });
 
 it('scanAll honors the limit option', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         $prefix = 'pest:scanall:t5:';
         $keys = array_map(fn ($i) => $prefix.'k'.$i, range(1, 200));
         $redis->del(...$keys);
@@ -163,8 +163,8 @@ it('scanAll honors the limit option', function () {
 });
 
 it('scan on empty keyspace returns cursor 0 and empty keys array', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         // Use a prefix that is guaranteed to match nothing.
         $prefix = 'pest:scan:emptykeyspace:xxxxxxxx:';
         $collected = [];
@@ -200,8 +200,8 @@ it('scan on empty keyspace returns cursor 0 and empty keys array', function () {
 });
 
 it('scan accepts a non-zero starting cursor and returns a valid reply', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         // Populate enough keys to make a non-zero cursor very likely on the
         // first SCAN with a small COUNT hint.
         $prefix = 'pest:scan:cursor:';
@@ -252,8 +252,8 @@ it('scan accepts a non-zero starting cursor and returns a valid reply', function
 });
 
 it('scanAll on empty keyspace returns an empty array', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         $prefix = 'pest:scanall:empty:xxxxxxxx:';
         $redis->scanAll(['MATCH' => $prefix.'*'], function ($all) use ($emit) {
             $emit($all);
@@ -265,8 +265,8 @@ it('scanAll on empty keyspace returns an empty array', function () {
 });
 
 it('scanAll with limit at exact key count boundary collects all expected keys', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         $prefix = 'pest:scanall:boundary:';
         $keys = array_map(fn ($i) => $prefix.'k'.$i, range(1, 30));
         $redis->del(...$keys);
@@ -296,8 +296,8 @@ it('scanAll with limit at exact key count boundary collects all expected keys', 
 });
 
 it('scan silently ignores unknown option keys', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         $prefix = 'pest:scan:opts:';
         $redis->del($prefix.'a', $prefix.'b');
         $redis->set($prefix.'a', '1');
@@ -330,8 +330,8 @@ it('scan silently ignores unknown option keys', function () {
 });
 
 it('scan accepts lowercase option keys (case-insensitive routing)', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         $prefix = 'pest:scan:lower:';
         $redis->del($prefix.'x', $prefix.'y');
         $redis->set($prefix.'x', '1');
@@ -364,8 +364,8 @@ it('scan accepts lowercase option keys (case-insensitive routing)', function () 
 });
 
 it('scan with malformed cursor receives a non-array pass-through result', function () {
-    /** @var \Tests\RedisTestCase $this */
-    $result = $this->runInWorker(<<<'PHP'
+
+    $result = runInWorker(<<<'PHP'
         // 'not-a-number' is an invalid cursor; Redis/Dragonfly responds with
         // an error reply.  The scan() format callback must pass non-array
         // replies through unchanged so the caller can detect the error.
