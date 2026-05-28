@@ -201,6 +201,30 @@ use Workerman\Timer;
  * @method static array jsonStrAppend($key, $path, $value, $cb = null)
  * @method static array jsonStrLen($key, $path = '$', $cb = null)
  * @method static array jsonToggle($key, $path, $cb = null)
+ * Bloom Filter module (RedisBloom-compatible — supported by Dragonfly)
+ * @method static mixed bf(...$args)
+ * @method static bool bfReserve($key, $errorRate, $capacity, $cb = null)
+ * @method static int bfAdd($key, $item, $cb = null)
+ * @method static int bfExists($key, $item, $cb = null)
+ * @method static array bfMAdd($key, ...$itemsAndCb)
+ * @method static array bfMExists($key, ...$itemsAndCb)
+ * Count-Min Sketch module (RedisBloom-compatible — supported by Dragonfly)
+ * @method static mixed cms(...$args)
+ * @method static bool cmsInitByDim($key, $width, $depth, $cb = null)
+ * @method static bool cmsInitByProb($key, $error, $probability, $cb = null)
+ * @method static array cmsIncrBy($key, ...$pairsAndCb)
+ * @method static array cmsQuery($key, ...$itemsAndCb)
+ * @method static bool cmsMerge($dest, $numKeys, array $sources, ?array $weights = null, $cb = null)
+ * @method static array cmsInfo($key, $cb = null)
+ * TopK module (RedisBloom-compatible — supported by Dragonfly)
+ * @method static mixed topk(...$args)
+ * @method static bool topkReserve($key, $topk, $width = 8, $depth = 7, $decay = 0.9, $cb = null)
+ * @method static array topkAdd($key, ...$itemsAndCb)
+ * @method static array topkIncrBy($key, ...$pairsAndCb)
+ * @method static array topkQuery($key, ...$itemsAndCb)
+ * @method static array topkCount($key, ...$itemsAndCb)
+ * @method static array topkList($key, $cb = null)
+ * @method static array topkInfo($key, $cb = null)
  * Streams methods
  * @method static int xAck($stream, $group, $arrMessages, $cb = null)
  * @method static string xAdd($strKey, $strId, $arrMessage, $iMaxLen = 0, $booApproximate = false, $cb = null)
@@ -1839,6 +1863,421 @@ class Client
     public function jsonToggle($key, $path, $cb = null)
     {
         return $this->json('TOGGLE', $key, $path, $cb);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bloom Filter module (RedisBloom-compatible — supported by Dragonfly)
+    |--------------------------------------------------------------------------
+    |
+    | Dragonfly natively implements RedisBloom's probabilistic-data-structure
+    | command set with the `BF.` prefix. Same dotted-module dispatch pattern
+    | as JSON.*: the dispatcher glues the verb onto `BF.` to form a single
+    | Redis token (e.g. `BF.RESERVE`).
+    |
+    | The bf(...$args) dispatcher accepts an arbitrary verb so callers can
+    | reach less-common commands (BF.INFO, BF.INSERT, …) without waiting for
+    | a typed shortcut. The shortcuts (bfReserve, bfAdd, …) bake in the verb
+    | for IDE autocomplete and clearer error messages.
+    */
+
+    /**
+     * BF.* — module dispatcher.
+     *
+     * Wire form: `BF.<verb> [args...]`. The first positional arg is the verb
+     * (uppercased and glued to the `BF.` prefix); a trailing callable is
+     * taken as the callback. A trailing null is treated as "no callback" so
+     * the typed shortcuts can forward their `$cb = null` defaults uniformly.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable or trailing null]
+     * @return mixed
+     */
+    public function bf(...$args)
+    {
+        if (!empty($args) && \end($args) === null) {
+            \array_pop($args);
+        }
+        return $this->dispatcher('BF.', $args);
+    }
+
+    /**
+     * BF.RESERVE — create a new Bloom filter with a target false-positive
+     * rate and initial capacity. Returns +OK on success.
+     *
+     * @param  string        $key
+     * @param  float         $errorRate   e.g. 0.01 for 1 %.
+     * @param  int           $capacity    Expected number of items.
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function bfReserve($key, $errorRate, $capacity, $cb = null)
+    {
+        return $this->bf('RESERVE', $key, $errorRate, $capacity, $cb);
+    }
+
+    /**
+     * BF.ADD — add one item to the filter. Reply is 1 if the item was newly
+     * added, 0 if it was already (probably) present.
+     *
+     * @param  string        $key
+     * @param  string        $item
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function bfAdd($key, $item, $cb = null)
+    {
+        return $this->bf('ADD', $key, $item, $cb);
+    }
+
+    /**
+     * BF.EXISTS — test for membership. Reply is 1 if the item is probably
+     * present, 0 if it is definitely absent.
+     *
+     * @param  string        $key
+     * @param  string        $item
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function bfExists($key, $item, $cb = null)
+    {
+        return $this->bf('EXISTS', $key, $item, $cb);
+    }
+
+    /**
+     * BF.MADD — add multiple items at once. Reply is an array of 0/1 per
+     * item, aligned with the input order.
+     *
+     * @param  string $key
+     * @param  mixed  ...$itemsAndCb items..., optional trailing callable.
+     * @return mixed
+     */
+    public function bfMAdd($key, ...$itemsAndCb)
+    {
+        $cb = null;
+        if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
+            $cb = \array_pop($itemsAndCb);
+        }
+        $args = ['MADD', $key, ...$itemsAndCb, $cb];
+        return $this->bf(...$args);
+    }
+
+    /**
+     * BF.MEXISTS — test multiple items at once. Reply is an array of 0/1
+     * per item, aligned with the input order.
+     *
+     * @param  string $key
+     * @param  mixed  ...$itemsAndCb items..., optional trailing callable.
+     * @return mixed
+     */
+    public function bfMExists($key, ...$itemsAndCb)
+    {
+        $cb = null;
+        if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
+            $cb = \array_pop($itemsAndCb);
+        }
+        $args = ['MEXISTS', $key, ...$itemsAndCb, $cb];
+        return $this->bf(...$args);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Count-Min Sketch module (RedisBloom-compatible — supported by Dragonfly)
+    |--------------------------------------------------------------------------
+    |
+    | CMS commands count item occurrences with sub-linear memory. Same dotted
+    | dispatch pattern as BF.* / JSON.*; the cms(...$args) dispatcher accepts
+    | arbitrary verbs, the shortcuts cover the typical surface.
+    */
+
+    /**
+     * CMS.* — module dispatcher.
+     *
+     * Wire form: `CMS.<verb> [args...]`. The first positional arg is the
+     * verb (uppercased and glued to the `CMS.` prefix); a trailing callable
+     * is taken as the callback. A trailing null is treated as "no callback"
+     * so the typed shortcuts can forward their `$cb = null` defaults
+     * uniformly.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable or trailing null]
+     * @return mixed
+     */
+    public function cms(...$args)
+    {
+        if (!empty($args) && \end($args) === null) {
+            \array_pop($args);
+        }
+        return $this->dispatcher('CMS.', $args);
+    }
+
+    /**
+     * CMS.INITBYDIM — create a sketch with explicit width / depth. Returns
+     * +OK on success.
+     *
+     * @param  string        $key
+     * @param  int           $width   Number of counters per row.
+     * @param  int           $depth   Number of rows (independent hashes).
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function cmsInitByDim($key, $width, $depth, $cb = null)
+    {
+        return $this->cms('INITBYDIM', $key, $width, $depth, $cb);
+    }
+
+    /**
+     * CMS.INITBYPROB — create a sketch sized for a target error rate and
+     * probability of being within that bound. Returns +OK on success.
+     *
+     * @param  string        $key
+     * @param  float         $error        Tolerated overestimation (e.g. 0.001).
+     * @param  float         $probability  Probability of staying within $error (e.g. 0.01).
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function cmsInitByProb($key, $error, $probability, $cb = null)
+    {
+        return $this->cms('INITBYPROB', $key, $error, $probability, $cb);
+    }
+
+    /**
+     * CMS.INCRBY — increment one or more items by their associated counts.
+     *
+     * Variadic shape: item1, count1, item2, count2, …, optional trailing
+     * callable. Reply is an array of the new estimated counts, aligned with
+     * the input order.
+     *
+     * @param  string $key
+     * @param  mixed  ...$pairsAndCb item/count pairs, optional trailing callable.
+     * @return mixed
+     */
+    public function cmsIncrBy($key, ...$pairsAndCb)
+    {
+        $cb = null;
+        if (!empty($pairsAndCb) && \is_callable(\end($pairsAndCb))) {
+            $cb = \array_pop($pairsAndCb);
+        }
+        $args = ['INCRBY', $key, ...$pairsAndCb, $cb];
+        return $this->cms(...$args);
+    }
+
+    /**
+     * CMS.QUERY — get the estimated counts for one or more items. Reply is
+     * an array of integers aligned with the input order.
+     *
+     * @param  string $key
+     * @param  mixed  ...$itemsAndCb items..., optional trailing callable.
+     * @return mixed
+     */
+    public function cmsQuery($key, ...$itemsAndCb)
+    {
+        $cb = null;
+        if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
+            $cb = \array_pop($itemsAndCb);
+        }
+        $args = ['QUERY', $key, ...$itemsAndCb, $cb];
+        return $this->cms(...$args);
+    }
+
+    /**
+     * CMS.MERGE — merge $numKeys source sketches into $dest, optionally
+     * scaling each by its corresponding weight. All sources and the dest
+     * must share the same width / depth.
+     *
+     * @param  string        $dest
+     * @param  int           $numKeys
+     * @param  array         $sources List of source sketch keys.
+     * @param  array|null    $weights Optional aligned weight list (same length as $sources).
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function cmsMerge($dest, $numKeys, array $sources, ?array $weights = null, $cb = null)
+    {
+        if (\is_callable($weights)) {
+            $cb = $weights;
+            $weights = null;
+        }
+        $args = ['MERGE', $dest, $numKeys];
+        foreach ($sources as $s) {
+            $args[] = $s;
+        }
+        if ($weights !== null) {
+            $args[] = 'WEIGHTS';
+            foreach ($weights as $w) {
+                $args[] = $w;
+            }
+        }
+        $args[] = $cb;
+        return $this->cms(...$args);
+    }
+
+    /**
+     * CMS.INFO — return sketch metadata as a flat array of
+     * [name, value, name, value, …]: width, depth, count.
+     *
+     * @param  string        $key
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function cmsInfo($key, $cb = null)
+    {
+        return $this->cms('INFO', $key, $cb);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | TopK module (RedisBloom-compatible — supported by Dragonfly)
+    |--------------------------------------------------------------------------
+    |
+    | TopK approximates the K most frequent items in a stream. Same dotted
+    | dispatch pattern as BF.* / CMS.* / JSON.*.
+    |
+    | Quirks worth noting (verified against Dragonfly):
+    |   - TOPK.ADD returns an array whose elements are either bulk strings
+    |     (the displaced item, when the new item bumped someone out of the
+    |     top-K) or nil/empty when no displacement happened. The Redis client
+    |     surface returns these as a flat array; nil elements come through as
+    |     null entries.
+    |   - TOPK.QUERY returns 1 / 0 per item (in / out of the top-K).
+    |   - TOPK.COUNT returns estimated counts per item.
+    |   - TOPK.LIST returns the current top-K members as a bulk-string array.
+    */
+
+    /**
+     * TOPK.* — module dispatcher.
+     *
+     * Wire form: `TOPK.<verb> [args...]`. The first positional arg is the
+     * verb (uppercased and glued to the `TOPK.` prefix); a trailing callable
+     * is taken as the callback. A trailing null is treated as "no callback"
+     * so the typed shortcuts can forward their `$cb = null` defaults
+     * uniformly.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable or trailing null]
+     * @return mixed
+     */
+    public function topk(...$args)
+    {
+        if (!empty($args) && \end($args) === null) {
+            \array_pop($args);
+        }
+        return $this->dispatcher('TOPK.', $args);
+    }
+
+    /**
+     * TOPK.RESERVE — create a new TopK sketch. Width / depth / decay use the
+     * RedisBloom defaults (8 / 7 / 0.9). Returns +OK on success.
+     *
+     * @param  string        $key
+     * @param  int           $topk    K — number of tracked items.
+     * @param  int           $width
+     * @param  int           $depth
+     * @param  float         $decay
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function topkReserve($key, $topk, $width = 8, $depth = 7, $decay = 0.9, $cb = null)
+    {
+        return $this->topk('RESERVE', $key, $topk, $width, $depth, $decay, $cb);
+    }
+
+    /**
+     * TOPK.ADD — add one or more items. Reply is an array aligned with the
+     * input: each slot is either the displaced item (string) or null when no
+     * eviction happened.
+     *
+     * @param  string $key
+     * @param  mixed  ...$itemsAndCb items..., optional trailing callable.
+     * @return mixed
+     */
+    public function topkAdd($key, ...$itemsAndCb)
+    {
+        $cb = null;
+        if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
+            $cb = \array_pop($itemsAndCb);
+        }
+        $args = ['ADD', $key, ...$itemsAndCb, $cb];
+        return $this->topk(...$args);
+    }
+
+    /**
+     * TOPK.INCRBY — increment one or more items by their associated counts.
+     *
+     * Variadic shape: item1, count1, item2, count2, …, optional trailing
+     * callable. Reply mirrors topkAdd(): array of displaced items / null.
+     *
+     * @param  string $key
+     * @param  mixed  ...$pairsAndCb item/count pairs, optional trailing callable.
+     * @return mixed
+     */
+    public function topkIncrBy($key, ...$pairsAndCb)
+    {
+        $cb = null;
+        if (!empty($pairsAndCb) && \is_callable(\end($pairsAndCb))) {
+            $cb = \array_pop($pairsAndCb);
+        }
+        $args = ['INCRBY', $key, ...$pairsAndCb, $cb];
+        return $this->topk(...$args);
+    }
+
+    /**
+     * TOPK.QUERY — test for membership in the current top-K. Reply is an
+     * array of 0/1 per item, aligned with the input order.
+     *
+     * @param  string $key
+     * @param  mixed  ...$itemsAndCb items..., optional trailing callable.
+     * @return mixed
+     */
+    public function topkQuery($key, ...$itemsAndCb)
+    {
+        $cb = null;
+        if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
+            $cb = \array_pop($itemsAndCb);
+        }
+        $args = ['QUERY', $key, ...$itemsAndCb, $cb];
+        return $this->topk(...$args);
+    }
+
+    /**
+     * TOPK.COUNT — return estimated counts for the given items. Items not
+     * in the top-K may be reported as 0. Reply is an array of integers
+     * aligned with the input order.
+     *
+     * @param  string $key
+     * @param  mixed  ...$itemsAndCb items..., optional trailing callable.
+     * @return mixed
+     */
+    public function topkCount($key, ...$itemsAndCb)
+    {
+        $cb = null;
+        if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
+            $cb = \array_pop($itemsAndCb);
+        }
+        $args = ['COUNT', $key, ...$itemsAndCb, $cb];
+        return $this->topk(...$args);
+    }
+
+    /**
+     * TOPK.LIST — return the current top-K members.
+     *
+     * @param  string        $key
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function topkList($key, $cb = null)
+    {
+        return $this->topk('LIST', $key, $cb);
+    }
+
+    /**
+     * TOPK.INFO — return sketch metadata as a flat array of
+     * [name, value, name, value, …]: k, width, depth, decay.
+     *
+     * @param  string        $key
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function topkInfo($key, $cb = null)
+    {
+        return $this->topk('INFO', $key, $cb);
     }
 
     /**
