@@ -1,4 +1,4 @@
-name: CI
+hname: CI
 
 on:
   push:
@@ -40,6 +40,7 @@ jobs:
           sudo apt-get install -y dragonfly lsof
           sudo mkdir -p /var/run/dragonfly
           sudo chown dfly:dfly /var/run/dragonfly
+          sudo systemctl stop dragonfly
           sudo -u dfly /usr/bin/dragonfly --flagfile=/etc/dragonfly/dragonfly.conf
           echo sudo systemctl start dragonfly
           for i in {1..30}; do
