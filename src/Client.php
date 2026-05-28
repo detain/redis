@@ -61,6 +61,8 @@ use Workerman\Timer;
  * @method static int ttl($key, $cb = null)
  * @method static int pttl($key, $cb = null)
  * @method static void restore($key, $ttl, $value, $cb = null)
+ * @method static array|null scan($cursor, array $options = [], $cb = null)
+ * @method static array|false|null scanAll(array $options = [], $cb = null)
  * Hashes methods
  * @method static false|int hSet($key, $hashKey, $value, $cb = null)
  * @method static bool hSetNx($key, $hashKey, $value, $cb = null)
@@ -906,13 +908,120 @@ class Client
     }
 
     /**
-     * scan
+     * Incrementally iterate the keyspace one batch at a time.
      *
-     * @throws Exception
+     * Reshapes Redis's `[cursor, [keys]]` tuple into `['cursor' => string, 'keys' => array]`.
+     * The cursor is always a string; `'0'` signals iteration complete. Non-array replies
+     * (e.g. error strings) are passed through unchanged.
+     *
+     * @param string|int    $cursor  Cursor value; start with '0'.
+     * @param array         $options Recognised keys (case-insensitive): MATCH, COUNT, TYPE. Unknown keys are ignored.
+     * @param callable|null $cb      function(array|mixed $reply, Client $client): void
+     * @return array|null            Coroutine mode: the formatted reply. Callback mode: null.
      */
-    public function scan()
+    public function scan($cursor, array $options = [], $cb = null)
     {
-        throw new Exception('Not implemented');
+        $args = ['SCAN', (string)$cursor];
+        foreach ($options as $key => $value) {
+            $upper = \strtoupper((string)$key);
+            if ($upper === 'MATCH' || $upper === 'COUNT' || $upper === 'TYPE') {
+                $args[] = $upper;
+                $args[] = $value;
+            }
+        }
+        $format = function ($result) {
+            if (!\is_array($result)) {
+                return $result;
+            }
+            $cursor = isset($result[0]) ? (string)$result[0] : '0';
+            $keys = (isset($result[1]) && \is_array($result[1])) ? $result[1] : [];
+            return ['cursor' => $cursor, 'keys' => $keys];
+        };
+        return $this->queueCommand($args, $cb, $format);
+    }
+
+    /**
+     * Drive SCAN to completion and return every matching key.
+     *
+     * Loops scan() from cursor '0' until Redis returns '0', accumulating keys across batches.
+     * The 'limit' option (default 100000) caps the result so a growing keyspace can't loop
+     * forever; iteration stops once the collected count reaches the limit. On a Redis-side
+     * error iteration halts and the caller receives `false` (see error()).
+     *
+     * @param array         $options Same keys as scan() (MATCH, COUNT, TYPE) plus 'limit' (int).
+     * @param callable|null $cb      function(array|false $keys, Client $client): void
+     * @return array|false|null      Coroutine mode: aggregated keys array, or `false` on error. Callback mode: null.
+     */
+    public function scanAll(array $options = [], $cb = null)
+    {
+        $limit = 100000;
+        $scanOptions = [];
+        foreach ($options as $key => $value) {
+            $upper = \strtoupper((string)$key);
+            if ($upper === 'LIMIT') {
+                $limit = (int)$value;
+                continue;
+            }
+            if ($upper === 'MATCH' || $upper === 'COUNT' || $upper === 'TYPE') {
+                $scanOptions[$upper] = $value;
+            }
+        }
+
+        // Coroutine mode: synchronous loop, return aggregated keys.
+        if (!$cb && \class_exists(EventLoop::class, false)) {
+            $collected = [];
+            $cursor = '0';
+            do {
+                $reply = $this->scan($cursor, $scanOptions);
+                if (!\is_array($reply) || !isset($reply['cursor'])) {
+                    // scan() failed; $this->_error already set by the
+                    // queueCommand error path. Signal abort to the caller.
+                    return false;
+                }
+                foreach ($reply['keys'] as $k) {
+                    $collected[] = $k;
+                    if (\count($collected) >= $limit) {
+                        return $collected;
+                    }
+                }
+                $cursor = $reply['cursor'];
+            } while ($cursor !== '0');
+            return $collected;
+        }
+
+        // Callback mode: chain scan() calls via nested callbacks.
+        $collected = [];
+        $self = $this;
+        $step = null;
+        $step = function ($reply) use (&$step, &$collected, $self, $scanOptions, $limit, $cb) {
+            if (!\is_array($reply) || !isset($reply['cursor'])) {
+                // scan() errored — last error is already in $self->_error.
+                // Signal abort to the user by handing them `false`, matching
+                // the rest of the client's error convention.
+                if ($cb) {
+                    \call_user_func($cb, false, $self);
+                }
+                return;
+            }
+            foreach ($reply['keys'] as $k) {
+                $collected[] = $k;
+                if (\count($collected) >= $limit) {
+                    if ($cb) {
+                        \call_user_func($cb, $collected, $self);
+                    }
+                    return;
+                }
+            }
+            if ($reply['cursor'] === '0') {
+                if ($cb) {
+                    \call_user_func($cb, $collected, $self);
+                }
+                return;
+            }
+            $self->scan($reply['cursor'], $scanOptions, $step);
+        };
+        $this->scan('0', $scanOptions, $step);
+        return null;
     }
 
     /**

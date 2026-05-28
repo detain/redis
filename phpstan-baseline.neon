@@ -54,38 +54,3 @@ parameters:
 			count: 1
 			path: src/Client.php
 
-		-
-			message: '#^Method Workerman\\Redis\\Protocols\\Redis\:\:decode\(\) should return string but returns array\<int, int\|string\>\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Protocols/Redis.php
-
-		-
-			message: '#^Method Workerman\\Redis\\Protocols\\Redis\:\:decode\(\) should return string but returns array\<int, list\<int\|string\|null\>\|string\>\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Protocols/Redis.php
-
-		-
-			message: '#^Method Workerman\\Redis\\Protocols\\Redis\:\:decode\(\) should return string but returns array\<int, string\>\.$#'
-			identifier: return.type
-			count: 5
-			path: src/Protocols/Redis.php
-
-		-
-			message: '#^Method Workerman\\Redis\\Protocols\\Redis\:\:decode\(\) should return string but returns array\<int, string\|null\>\.$#'
-			identifier: return.type
-			count: 2
-			path: src/Protocols/Redis.php
-
-		-
-			message: '#^Method Workerman\\Redis\\Protocols\\Redis\:\:decode\(\) should return string but returns int\.$#'
-			identifier: return.type
-			count: 2
-			path: src/Protocols/Redis.php
-
-		-
-			message: '#^Cannot use array destructuring on string\.$#'
-			identifier: offsetAccess.nonArray
-			count: 6
-			path: tests/Unit/ProtocolTest.php
