@@ -28,6 +28,8 @@ use Workerman\Timer;
  * @method static int decrBy($key, $value, $cb = null)
  * @method static string|bool get($key, $cb = null)
  * @method static int getBit($key, $offset, $cb = null)
+ * @method static string|null getDel($key, $cb = null)
+ * @method static string|null getEx($key, array $options = [], $cb = null)
  * @method static string getRange($key, $start, $end, $cb = null)
  * @method static string getSet($key, $value, $cb = null)
  * @method static int incrBy($key, $value, $cb = null)
@@ -39,8 +41,10 @@ use Workerman\Timer;
  * @method static bool pSetEx($key, $ttl, $value, $cb = null)
  * @method static bool setNx($key, $value, $cb = null)
  * @method static string setRange($key, $offset, $value, $cb = null)
+ * @method static string substr($key, $start, $end, $cb = null)
  * @method static int strLen($key, $cb = null)
  * Keys methods
+ * @method static int copy($src, $dst, array $options = [], $cb = null)
  * @method static int del(...$keys, $cb = null)
  * @method static int unlink(...$keys, $cb = null)
  * @method static false|string dump($key, $cb = null)
@@ -49,6 +53,8 @@ use Workerman\Timer;
  * @method static bool pexpire($key, $ttl, $cb = null)
  * @method static bool expireAt($key, $timestamp, $cb = null)
  * @method static bool pexpireAt($key, $timestamp, $cb = null)
+ * @method static int expireTime($key, $cb = null)
+ * @method static int pExpireTime($key, $cb = null)
  * @method static array keys($pattern, $cb = null)
  * @method static void migrate($host, $port, $keys, $dbIndex, $timeout, $copy = false, $replace = false, $cb = null)
  * @method static bool move($key, $dbIndex, $cb = null)
@@ -57,6 +63,7 @@ use Workerman\Timer;
  * @method static string randomKey($cb = null)
  * @method static bool rename($srcKey, $dstKey, $cb = null)
  * @method static bool renameNx($srcKey, $dstKey, $cb = null)
+ * @method static int touch(...$keys, $cb = null)
  * @method static string type($key, $cb = null)
  * @method static int ttl($key, $cb = null)
  * @method static int pttl($key, $cb = null)
@@ -171,6 +178,8 @@ use Workerman\Timer;
  * @method static array|bool time($cb = null)
  * @method static bool flushDb($async = false, $cb = null)
  * @method static bool flushAll($async = false, $cb = null)
+ * @method static string echo($message, $cb = null)
+ * @method static array hello($protover = null, $cb = null)
  * Generic methods
  * @method static mixed rawCommand(...$commandAndArgs, $cb = null)
  * Transactions methods
@@ -1064,6 +1073,46 @@ class Client
             $async = false;
         }
         return $this->queueCommand($async ? ['FLUSHALL', 'ASYNC'] : ['FLUSHALL'], $cb);
+    }
+
+    /**
+     * RESP version negotiation / server handshake.
+     *
+     * Like info(), the first positional arg accepts the callback directly so
+     * `$redis->hello($cb)` works without a $protover argument. Otherwise
+     * `$redis->hello(2, $cb)` upgrades to RESP3 and `$redis->hello(2, ['AUTH',
+     * 'user', 'pass', 'SETNAME', 'client-name'], $cb)` includes the full
+     * sub-command grammar — pass the extra args as a flat array which the
+     * RESP encoder flattens onto the wire.
+     *
+     * Without an explicit method, calls like hello($cb) (count($args) == 1)
+     * fall into __call() which doesn't extract the trailing callable and
+     * sends the closure as a HELLO argument — same no-arg-callback bug as
+     * PING / INFO / DBSIZE etc.
+     *
+     * @param int|string|callable|null $protover RESP protocol version (2 or 3), or callable for the callback.
+     * @param array|callable|null      $extra    Additional sub-args (AUTH/SETNAME), or callable for the callback.
+     * @param callable|null            $cb       function(array $reply, Client $client): void
+     * @return array|null
+     */
+    public function hello($protover = null, $extra = null, $cb = null)
+    {
+        if (\is_callable($protover)) {
+            $cb = $protover;
+            $protover = null;
+            $extra = null;
+        } elseif (\is_callable($extra)) {
+            $cb = $extra;
+            $extra = null;
+        }
+        $args = ['HELLO'];
+        if ($protover !== null) {
+            $args[] = $protover;
+        }
+        if (\is_array($extra)) {
+            $args[] = $extra;
+        }
+        return $this->queueCommand($args, $cb);
     }
 
     /**
