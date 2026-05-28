@@ -183,6 +183,24 @@ use Workerman\Timer;
  * @method static array geoSearch($key, $from, $by, array $options = [], $cb = null)
  * @method static array geoRadiusRo($key, $longitude, $latitude, $radius, $unit, array $options = [], $cb = null)
  * @method static array geoRadiusByMemberRo($key, $member, $radius, $unit, array $options = [], $cb = null)
+ * JSON module (RedisJSON-compatible — supported by Dragonfly)
+ * @method static mixed json(...$args)
+ * @method static bool jsonSet($key, $path, $value, $cb = null)
+ * @method static string|array jsonGet($key, ...$pathsAndCb)
+ * @method static int jsonDel($key, $path = '$', $cb = null)
+ * @method static int jsonForget($key, $path = '$', $cb = null)
+ * @method static array jsonMGet(array $keys, $path = '$', $cb = null)
+ * @method static bool jsonMSet(array $tuples, $cb = null)
+ * @method static bool jsonMerge($key, $path, $value, $cb = null)
+ * @method static array jsonArrAppend($key, $path, ...$valuesAndCb)
+ * @method static array jsonArrLen($key, $path = '$', $cb = null)
+ * @method static array jsonObjKeys($key, $path = '$', $cb = null)
+ * @method static array jsonObjLen($key, $path = '$', $cb = null)
+ * @method static array jsonType($key, $path = '$', $cb = null)
+ * @method static array jsonNumIncrBy($key, $path, $by, $cb = null)
+ * @method static array jsonStrAppend($key, $path, $value, $cb = null)
+ * @method static array jsonStrLen($key, $path = '$', $cb = null)
+ * @method static array jsonToggle($key, $path, $cb = null)
  * Streams methods
  * @method static int xAck($stream, $group, $arrMessages, $cb = null)
  * @method static string xAdd($strKey, $strId, $arrMessage, $iMaxLen = 0, $booApproximate = false, $cb = null)
@@ -1501,6 +1519,326 @@ class Client
     public function cluster(...$args)
     {
         return $this->dispatcher('CLUSTER ', $args);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | JSON module (RedisJSON-compatible — supported by Dragonfly)
+    |--------------------------------------------------------------------------
+    |
+    | Dragonfly natively implements the RedisJSON command set with a `JSON.`
+    | prefix. The dispatcher pattern matches the dotted module form: the
+    | trailing dot on the prefix tells dispatcher() to glue the verb onto
+    | the prefix as a single Redis token (e.g. `JSON.SET`), as opposed to
+    | the space-separated subcommand form used by CONFIG/ACL/etc.
+    |
+    | The json(...$args) dispatcher accepts an arbitrary verb. The shortcut
+    | wrappers (jsonSet, jsonGet, …) bake in the verb so callers get IDE
+    | autocomplete and don't have to remember the magic verb string.
+    |
+    | JSON values are passed as JSON-encoded strings on the wire; the server
+    | echoes them back the same way. The format-callback layer does not
+    | decode them — callers should json_decode($reply, true) where they
+    | need a PHP array.
+    */
+
+    /**
+     * JSON.* — module dispatcher.
+     *
+     * Wire form: `JSON.<verb> [args...]`. The first positional arg is the
+     * verb (uppercased here and glued to the `JSON.` prefix); a trailing
+     * callable is taken as the callback.
+     *
+     * A trailing null is treated as "no callback" — this lets the shortcut
+     * wrappers (jsonSet, jsonGet, …) forward their `$cb = null` default
+     * uniformly without having to special-case the null path themselves.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable or trailing null]
+     * @return mixed
+     */
+    public function json(...$args)
+    {
+        if (!empty($args) && \end($args) === null) {
+            \array_pop($args);
+        }
+        return $this->dispatcher('JSON.', $args);
+    }
+
+    // ---- Setters -----------------------------------------------------------
+
+    /**
+     * JSON.SET — set the JSON value at $path in $key.
+     *
+     * @param string        $key
+     * @param string        $path   JSONPath, typically `$` for the root.
+     * @param string        $value  JSON-encoded string.
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonSet($key, $path, $value, $cb = null)
+    {
+        return $this->json('SET', $key, $path, $value, $cb);
+    }
+
+    /**
+     * JSON.MSET — set multiple key/path/value triples atomically.
+     *
+     * @param array         $tuples [[key, path, value], ...]
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonMSet(array $tuples, $cb = null)
+    {
+        $args = ['MSET'];
+        foreach ($tuples as $t) {
+            $args[] = $t[0];
+            $args[] = $t[1];
+            $args[] = $t[2];
+        }
+        $args[] = $cb;
+        return $this->json(...$args);
+    }
+
+    /**
+     * JSON.MERGE — merge $value into the document at $path (RFC 7396).
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param string        $value  JSON-encoded string.
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonMerge($key, $path, $value, $cb = null)
+    {
+        return $this->json('MERGE', $key, $path, $value, $cb);
+    }
+
+    // ---- Getters -----------------------------------------------------------
+
+    /**
+     * JSON.GET — fetch the JSON value at zero or more paths.
+     *
+     * Wire form: `JSON.GET key [path ...]`. With no paths the entire
+     * document is returned. With one path the matching slice is returned
+     * (wrapped in an array per JSONPath semantics). With multiple paths
+     * the server returns a JSON object keyed by path, e.g.
+     * `{"$.a":[1],"$.b":["hi"]}`.
+     *
+     * A trailing callable in $pathsAndCb is treated as the callback.
+     *
+     * @param  string $key
+     * @param  mixed  ...$pathsAndCb [path ...] with optional trailing callable.
+     * @return mixed
+     */
+    public function jsonGet($key, ...$pathsAndCb)
+    {
+        $cb = null;
+        if (!empty($pathsAndCb) && \is_callable(\end($pathsAndCb))) {
+            $cb = \array_pop($pathsAndCb);
+        }
+        $args = ['GET', $key, ...$pathsAndCb, $cb];
+        return $this->json(...$args);
+    }
+
+    /**
+     * JSON.MGET — fetch the value at $path across multiple keys.
+     *
+     * @param array         $keys
+     * @param string        $path
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonMGet(array $keys, $path = '$', $cb = null)
+    {
+        if (\is_callable($path)) {
+            $cb = $path;
+            $path = '$';
+        }
+        $args = ['MGET', ...$keys, $path, $cb];
+        return $this->json(...$args);
+    }
+
+    /**
+     * JSON.TYPE — JSON type of the value at $path.
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonType($key, $path = '$', $cb = null)
+    {
+        if (\is_callable($path)) {
+            $cb = $path;
+            $path = '$';
+        }
+        return $this->json('TYPE', $key, $path, $cb);
+    }
+
+    /**
+     * JSON.OBJKEYS — keys of the JSON object at $path.
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonObjKeys($key, $path = '$', $cb = null)
+    {
+        if (\is_callable($path)) {
+            $cb = $path;
+            $path = '$';
+        }
+        return $this->json('OBJKEYS', $key, $path, $cb);
+    }
+
+    /**
+     * JSON.OBJLEN — number of keys in the JSON object at $path.
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonObjLen($key, $path = '$', $cb = null)
+    {
+        if (\is_callable($path)) {
+            $cb = $path;
+            $path = '$';
+        }
+        return $this->json('OBJLEN', $key, $path, $cb);
+    }
+
+    /**
+     * JSON.ARRLEN — length of the JSON array at $path.
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonArrLen($key, $path = '$', $cb = null)
+    {
+        if (\is_callable($path)) {
+            $cb = $path;
+            $path = '$';
+        }
+        return $this->json('ARRLEN', $key, $path, $cb);
+    }
+
+    /**
+     * JSON.STRLEN — length of the JSON string at $path.
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonStrLen($key, $path = '$', $cb = null)
+    {
+        if (\is_callable($path)) {
+            $cb = $path;
+            $path = '$';
+        }
+        return $this->json('STRLEN', $key, $path, $cb);
+    }
+
+    // ---- Modifiers ---------------------------------------------------------
+
+    /**
+     * JSON.DEL — remove the value at $path.
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonDel($key, $path = '$', $cb = null)
+    {
+        if (\is_callable($path)) {
+            $cb = $path;
+            $path = '$';
+        }
+        return $this->json('DEL', $key, $path, $cb);
+    }
+
+    /**
+     * JSON.FORGET — alias of JSON.DEL.
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonForget($key, $path = '$', $cb = null)
+    {
+        if (\is_callable($path)) {
+            $cb = $path;
+            $path = '$';
+        }
+        return $this->json('FORGET', $key, $path, $cb);
+    }
+
+    /**
+     * JSON.ARRAPPEND — append one or more JSON-encoded values to the array at $path.
+     *
+     * @param  string $key
+     * @param  string $path
+     * @param  mixed  ...$valuesAndCb JSON-encoded values, with optional trailing callable.
+     * @return mixed
+     */
+    public function jsonArrAppend($key, $path, ...$valuesAndCb)
+    {
+        $cb = null;
+        if (!empty($valuesAndCb) && \is_callable(\end($valuesAndCb))) {
+            $cb = \array_pop($valuesAndCb);
+        }
+        $args = ['ARRAPPEND', $key, $path, ...$valuesAndCb, $cb];
+        return $this->json(...$args);
+    }
+
+    /**
+     * JSON.NUMINCRBY — increment the number at $path by $by.
+     *
+     * @param string         $key
+     * @param string         $path
+     * @param int|float      $by
+     * @param callable|null  $cb
+     * @return mixed
+     */
+    public function jsonNumIncrBy($key, $path, $by, $cb = null)
+    {
+        return $this->json('NUMINCRBY', $key, $path, $by, $cb);
+    }
+
+    /**
+     * JSON.STRAPPEND — append a JSON-encoded string to the string at $path.
+     *
+     * The value must be a JSON-encoded string literal (e.g. `'"!"'`), not
+     * a bare PHP string — that's the RedisJSON convention.
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param string        $value  JSON-encoded string literal.
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonStrAppend($key, $path, $value, $cb = null)
+    {
+        return $this->json('STRAPPEND', $key, $path, $value, $cb);
+    }
+
+    /**
+     * JSON.TOGGLE — flip the boolean at $path.
+     *
+     * @param string        $key
+     * @param string        $path
+     * @param callable|null $cb
+     * @return mixed
+     */
+    public function jsonToggle($key, $path, $cb = null)
+    {
+        return $this->json('TOGGLE', $key, $path, $cb);
     }
 
     /**

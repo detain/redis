@@ -174,6 +174,19 @@ $redis->dbSize(function ($count) {
 
 `info($section, $cb)` accepts an optional section filter (`'server'`, `'memory'`, `'clients'`, …). `flushDb($async, $cb)` and `flushAll($async, $cb)` take an optional first arg — pass `true` to send `FLUSHDB ASYNC` / `FLUSHALL ASYNC` for a non-blocking flush, or pass the callback directly for a synchronous one.
 
+## JSON module
+
+The `json()` dispatcher and `jsonSet()` / `jsonGet()` / `jsonDel()` / `jsonMerge()` / `jsonArrAppend()` / … shortcuts speak the RedisJSON `JSON.*` command family. Dragonfly implements this natively (no module install needed); on stock Redis the same wire form works against a server with RedisJSON loaded. Values cross the wire as JSON-encoded strings — the client does not auto-decode replies, so use `json_decode($reply, true)` where you need a PHP array.
+
+```php
+$redis->jsonSet('user:42', '$', '{"name":"alice","tags":["a","b"]}', function ($ok) use ($redis) {
+    $redis->jsonGet('user:42', function ($reply) {
+        $doc = json_decode($reply, true);
+        // $doc === ['name' => 'alice', 'tags' => ['a', 'b']]
+    });
+});
+```
+
 ## Development
 
 ```
