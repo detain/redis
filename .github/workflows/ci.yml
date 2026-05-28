@@ -38,6 +38,8 @@ jobs:
           sudo curl -Lo /etc/apt/sources.list.d/dragonfly.sources https://packages.dragonflydb.io/dragonfly.sources
           sudo apt-get update
           sudo apt-get install -y dragonfly
+          sudo mkdir -p /var/run/dragonfly
+          sudo chown dfly:dfly /var/run/dragonfly
           sudo systemctl start dragonfly
           for i in {1..30}; do
             if redis-cli ping >/dev/null 2>&1; then
