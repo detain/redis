@@ -1,13 +1,46 @@
 {
-    "name"  : "workerman/redis",
-    "type"  : "library",
+    "name": "workerman/redis",
+    "type": "library",
+    "description": "Asynchronous redis client for Workerman. Supports callback and Revolt-coroutine modes.",
+    "keywords": ["redis", "workerman", "async", "non-blocking", "coroutine", "dragonfly"],
     "homepage": "http://www.workerman.net",
-    "license" : "MIT",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "walkor",
+            "email": "walkor@workerman.net",
+            "homepage": "https://www.workerman.net",
+            "role": "Developer"
+        }
+    ],
     "require": {
-        "php": ">=7",
+        "php": ">=8.1",
         "workerman/workerman": "^4.1.0||^5.0.0"
+    },
+    "require-dev": {
+        "pestphp/pest": "^2.36 || ^3 || ^4",
+        "mockery/mockery": "^1.6.12",
+        "phpstan/phpstan": "^2.1"
+    },
+    "suggest": {
+        "revolt/event-loop": "Enables coroutine-style synchronous return values when no callback is provided."
     },
     "autoload": {
         "psr-4": {"Workerman\\Redis\\": "./src"}
+    },
+    "autoload-dev": {
+        "psr-4": {"Tests\\": "tests/"}
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "analyze": "php -d memory_limit=1G vendor/bin/phpstan analyse",
+        "test": "pest --colors=always",
+        "test:coverage": "pest --colors=always --coverage --min=70"
     }
 }

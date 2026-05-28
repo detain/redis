@@ -4,3 +4,15 @@ logs
 .settings
 .idea
 .DS_Store
+/vendor/
+/composer.lock
+/.phpunit.cache/
+/.pest.cache/
+/.phpstan.cache/
+/.phpunit.result.cache
+coverage.xml
+coverage.cobertura.xml
+clover.xml
+.phpunit.coverage/
+.caliber/
+async_plan.md
