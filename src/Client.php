@@ -193,7 +193,16 @@ use Workerman\Timer;
  * @method static bool xSetId($key, $lastId, array $options = [], $cb = null)
  * Pub/sub methods
  * @method static mixed publish($channel, $message, $cb = null)
+ * @method static int sPublish($channel, $message, $cb = null)
  * @method static mixed pubSub($keyword, $argument = null, $cb = null)
+ * @method static void sSubscribe($channels, $cb)
+ * TODO: UNSUBSCRIBE / PUNSUBSCRIBE / SUNSUBSCRIBE need a subscribe-lock bypass
+ * (the _subscribe = true flag set by process() prevents new commands from
+ * being sent on a subscribed connection). Sent through __call() they never
+ * reach the wire. A follow-up commit should add explicit methods that write
+ * the unsubscribe frame directly via $this->_connection->send() and reset
+ * $this->_subscribe in the response handler. Until then, users that need
+ * teardown can pair a dedicated subscriber Client with close().
  * Connection / server methods
  * @method static string|bool ping($cb = null)
  * @method static string|bool quit($cb = null)
@@ -520,7 +529,7 @@ class Client
         }
         \reset($this->_queue);
         $queue = \current($this->_queue);
-        if ($queue[0][0] === 'SUBSCRIBE' || $queue[0][0] === 'PSUBSCRIBE') {
+        if ($queue[0][0] === 'SUBSCRIBE' || $queue[0][0] === 'PSUBSCRIBE' || $queue[0][0] === 'SSUBSCRIBE') {
             $this->_subscribe = true;
         }
         $this->_waiting = true;
@@ -650,6 +659,39 @@ class Client
             }
         };
         $this->_queue[] = [['PSUBSCRIBE', $patterns], time(), $new_cb];
+        $this->process();
+    }
+
+    /**
+     * Sharded subscribe — listen for SPUBLISH messages on one or more shard
+     * channels. Mirrors subscribe() but uses SSUBSCRIBE / smessage instead of
+     * SUBSCRIBE / message. The SSUBSCRIBE command flips $this->_subscribe via
+     * process(), so the connection enters subscribe-mode just like the regular
+     * subscribe() and the same teardown caveats apply (see the TODO comment
+     * near the @method declarations for UNSUBSCRIBE / SUNSUBSCRIBE).
+     *
+     * @param string|array $channels Single channel name or list of channel names.
+     * @param callable     $cb       function(string $channel, string $message, Client $client): void
+     */
+    public function sSubscribe($channels, $cb)
+    {
+        $new_cb = function ($result) use ($cb) {
+            if (!$result) {
+                echo $this->error();
+                return;
+            }
+            $response_type = $result[0];
+            switch ($response_type) {
+                case 'ssubscribe':
+                    return;
+                case 'smessage':
+                    \call_user_func($cb, $result[1], $result[2], $this);
+                    return;
+                default:
+                    echo 'unknow response type for ssubscribe. buffer:' . serialize($result) . "\n";
+            }
+        };
+        $this->_queue[] = [['SSUBSCRIBE', $channels], time(), $new_cb];
         $this->process();
     }
 
