@@ -173,6 +173,7 @@ use Workerman\Timer;
  * @method static mixed pubSub($keyword, $argument = null, $cb = null)
  * Connection / server methods
  * @method static string|bool ping($cb = null)
+ * @method static string|bool quit($cb = null)
  * @method static string|null info($section = null, $cb = null)
  * @method static int|bool dbSize($cb = null)
  * @method static array|bool time($cb = null)
@@ -280,6 +281,14 @@ class Client
      * @var bool
      */
     protected $_firstConnect = true;
+
+    /**
+     * Set to true when QUIT has been sent. Suppresses the onClose
+     * auto-reconnect so the connection genuinely closes.
+     *
+     * @var bool
+     */
+    protected $_quitting = false;
 
     /**
      * Client constructor.
@@ -400,6 +409,10 @@ class Client
                 $this->_reconnectTimer = null;
             }
             $this->closeConnection();
+            if ($this->_quitting) {
+                // Intentional QUIT — do not auto-reconnect.
+                return;
+            }
             if (microtime(true) - $time_start > 5) {
                 $this->connect();
             } else {
@@ -987,6 +1000,29 @@ class Client
     public function ping($cb = null)
     {
         return $this->queueCommand(['PING'], $cb);
+    }
+
+    /**
+     * QUIT — ask the server to close the connection.
+     *
+     * Sets the internal $_quitting flag so the onClose handler suppresses
+     * the usual 5-second reconnect timer. Once QUIT's +OK reply has been
+     * delivered to the callback, the socket is closed by the server and
+     * the client stays closed — call connect() again only if you need to
+     * resume work on the same instance.
+     *
+     * @param  callable|null $cb function(string|bool $reply, Client $client): void
+     * @return mixed             Coroutine mode: true on +OK. Callback mode: null.
+     */
+    public function quit($cb = null)
+    {
+        $this->_quitting = true;
+        $userCb = $cb;
+        return $this->queueCommand(['QUIT'], function ($reply, $client) use ($userCb) {
+            if ($userCb !== null) {
+                \call_user_func($userCb, $reply, $client);
+            }
+        });
     }
 
     /**
