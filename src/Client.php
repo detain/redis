@@ -168,6 +168,11 @@ use Workerman\Timer;
  * @method static int pfAdd($key, $values, $cb = null)
  * @method static int pfCount($keys, $cb = null)
  * @method static bool pfMerge($dstKey, $srcKeys, $cb = null)
+ * Bitmap methods
+ * @method static int bitOp($operation, $destKey, ...$keys, $cb = null)
+ * @method static int bitPos($key, $bit, $start = 0, $end = -1, $byte = false, $cb = null)
+ * @method static array bitField($key, ...$ops, $cb = null)
+ * @method static array bitFieldRo($key, ...$ops, $cb = null)
  * Geocoding methods
  * @method static int geoAdd($key, $longitude, $latitude, $member, ...$items, $cb = null)
  * @method static array geoHash($key, ...$members, $cb = null)
@@ -175,6 +180,9 @@ use Workerman\Timer;
  * @method static double geoDist($key, $members, $unit = '', $cb = null)
  * @method static int|array geoRadius($key, $longitude, $latitude, $radius, $unit, $options = [], $cb = null)
  * @method static array geoRadiusByMember($key, $member, $radius, $units, $options = [], $cb = null)
+ * @method static array geoSearch($key, $from, $by, array $options = [], $cb = null)
+ * @method static array geoRadiusRo($key, $longitude, $latitude, $radius, $unit, array $options = [], $cb = null)
+ * @method static array geoRadiusByMemberRo($key, $member, $radius, $unit, array $options = [], $cb = null)
  * Streams methods
  * @method static int xAck($stream, $group, $arrMessages, $cb = null)
  * @method static string xAdd($strKey, $strId, $arrMessage, $iMaxLen = 0, $booApproximate = false, $cb = null)
@@ -224,6 +232,8 @@ use Workerman\Timer;
  * Scripting methods
  * @method static mixed eval($script, $args = [], $numKeys = 0, $cb = null)
  * @method static mixed evalSha($sha, $args = [], $numKeys = 0, $cb = null)
+ * @method static mixed evalRo($script, $args = [], $numKeys = 0, $cb = null)
+ * @method static mixed evalShaRo($sha, $args = [], $numKeys = 0, $cb = null)
  * @method static mixed script($command, ...$scripts, $cb = null)
  * @method static mixed client(...$args, $cb = null)
  * @method static null|string getLastError($cb = null)
@@ -985,6 +995,149 @@ class Client
             throw new \InvalidArgumentException('rawCommand requires at least the command name');
         }
         return $this->queueCommand($args, $cb);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Underscore-bearing verbs (Bitmap / Geo / Scripting RO variants)
+    |--------------------------------------------------------------------------
+    |
+    | __call() runs strtoupper() on the method name, which strips no characters
+    | but also adds none — so 'bitFieldRo' becomes 'BITFIELDRO', not the
+    | required 'BITFIELD_RO'. The server rejects the verb with "ERR unknown
+    | command". These thin wrappers spell the underscore form directly on the
+    | wire while keeping the camelCase method name advertised in the @method
+    | declarations above.
+    */
+
+    /**
+     * BITFIELD_RO — read-only variant of BITFIELD, operations limited to GET.
+     *
+     * Args after $key are forwarded verbatim. A trailing callable, if present,
+     * is popped and treated as the callback — mirrors how info() / hello() /
+     * flushDb() fold in a trailing-callback shortcut.
+     *
+     * @param  string        $key
+     * @param  mixed         ...$args GET-op groups (e.g. 'GET', 'i5', 0) and an optional trailing callable.
+     * @return array|null             See bitField() return semantics.
+     */
+    public function bitFieldRo($key, ...$args)
+    {
+        $cb = null;
+        if (!empty($args) && \is_callable(\end($args))) {
+            $cb = \array_pop($args);
+        }
+        return $this->queueCommand(\array_merge(['BITFIELD_RO', $key], $args), $cb);
+    }
+
+    /**
+     * GEORADIUS_RO — read-only variant of GEORADIUS.
+     *
+     * $options is a flat array of additional wire tokens (WITHCOORD, WITHDIST,
+     * COUNT n, ASC/DESC, etc.). A callable passed as $options is interpreted
+     * as the callback for no-option calls.
+     *
+     * @param  string         $key
+     * @param  float|string   $lng
+     * @param  float|string   $lat
+     * @param  float|int      $radius
+     * @param  string         $unit    m | km | ft | mi
+     * @param  array|callable $options Flat array of extra tokens, or the callback.
+     * @param  callable|null  $cb      function($reply, Client $client): void
+     * @return array|null              Coroutine mode: list of members (or richer rows with options). Callback mode: null.
+     */
+    public function geoRadiusRo($key, $lng, $lat, $radius, $unit, $options = [], $cb = null)
+    {
+        if (\is_callable($options)) {
+            $cb = $options;
+            $options = [];
+        }
+        return $this->queueCommand(\array_merge(['GEORADIUS_RO', $key, $lng, $lat, $radius, $unit], $options), $cb);
+    }
+
+    /**
+     * GEORADIUSBYMEMBER_RO — read-only variant of GEORADIUSBYMEMBER.
+     *
+     * Same $options semantics as geoRadiusRo(): a flat array of extra wire
+     * tokens, or a callable that is taken as the callback.
+     *
+     * @param  string         $key
+     * @param  string         $member
+     * @param  float|int      $radius
+     * @param  string         $unit    m | km | ft | mi
+     * @param  array|callable $options Flat array of extra tokens, or the callback.
+     * @param  callable|null  $cb      function($reply, Client $client): void
+     * @return array|null              Coroutine mode: list of members. Callback mode: null.
+     */
+    public function geoRadiusByMemberRo($key, $member, $radius, $unit, $options = [], $cb = null)
+    {
+        if (\is_callable($options)) {
+            $cb = $options;
+            $options = [];
+        }
+        return $this->queueCommand(\array_merge(['GEORADIUSBYMEMBER_RO', $key, $member, $radius, $unit], $options), $cb);
+    }
+
+    /**
+     * EVAL_RO — execute a Lua script in read-only mode.
+     *
+     * Wire form: EVAL_RO script numkeys [arg ...]. $args is a flat array of
+     * KEYS followed by ARGV (the first $numKeys elements are KEYS). A
+     * callable passed in either positional slot is taken as the callback,
+     * mirroring how info()/hello() fold trailing callables.
+     *
+     * @param  string                  $script
+     * @param  array|callable          $args    Flat KEYS+ARGV array, or the callback.
+     * @param  int|callable            $numKeys Number of KEYS prefixing $args, or the callback.
+     * @param  callable|null           $cb      function($reply, Client $client): void
+     * @return mixed
+     */
+    public function evalRo($script, $args = [], $numKeys = 0, $cb = null)
+    {
+        if (\is_callable($args)) {
+            $cb = $args;
+            $args = [];
+            $numKeys = 0;
+        }
+        if (\is_callable($numKeys)) {
+            $cb = $numKeys;
+            $numKeys = \count($args);
+        }
+        $wire = ['EVAL_RO', $script, $numKeys];
+        foreach ($args as $a) {
+            $wire[] = $a;
+        }
+        return $this->queueCommand($wire, $cb);
+    }
+
+    /**
+     * EVALSHA_RO — execute a cached Lua script (by SHA1) in read-only mode.
+     *
+     * Same signature semantics as evalRo(): $args is a flat KEYS+ARGV array,
+     * and a callable in either positional slot is taken as the callback.
+     *
+     * @param  string                  $sha
+     * @param  array|callable          $args    Flat KEYS+ARGV array, or the callback.
+     * @param  int|callable            $numKeys Number of KEYS prefixing $args, or the callback.
+     * @param  callable|null           $cb      function($reply, Client $client): void
+     * @return mixed
+     */
+    public function evalShaRo($sha, $args = [], $numKeys = 0, $cb = null)
+    {
+        if (\is_callable($args)) {
+            $cb = $args;
+            $args = [];
+            $numKeys = 0;
+        }
+        if (\is_callable($numKeys)) {
+            $cb = $numKeys;
+            $numKeys = \count($args);
+        }
+        $wire = ['EVALSHA_RO', $sha, $numKeys];
+        foreach ($args as $a) {
+            $wire[] = $a;
+        }
+        return $this->queueCommand($wire, $cb);
     }
 
     /**
