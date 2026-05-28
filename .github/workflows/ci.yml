@@ -39,20 +39,6 @@ jobs:
           coverage: pcov
           tools: composer:v2
 
-      - name: Check Dragonfly Service
-        run: |
-          for i in {1..30}; do
-            if redis-cli ping >/dev/null 2>&1; then
-              echo "Dragonfly is up"
-              redis-cli info server | head -5
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Dragonfly did not start in time"
-          sudo systemctl status dragonfly --no-pager || true
-          exit 1
-
       - name: Get composer cache directory
         id: composer-cache
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
