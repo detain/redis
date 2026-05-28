@@ -99,6 +99,28 @@ $redis->hScanAll('user:42:meta', ['COUNT' => 200], function ($fields) {
 The `limit` option (default `100000`) caps the total fields collected by `hScanAll()`.
 On a Redis-side error the callback receives `false`.
 
+## SSCAN
+
+Non-blocking iterator over a single set's members. `sScan()` wraps a single `SSCAN` call;
+`sScanAll()` drives the cursor loop and returns every member as a flat array.
+
+```php
+// One step — pass the cursor through yourself.
+$redis->sScan('user:42:tags', '0', ['MATCH' => 'topic_*', 'COUNT' => 100], function ($reply) {
+    // $reply === ['cursor' => '17', 'members' => ['topic_php', 'topic_redis', ...]]
+});
+
+// Iterator helper — collects every member of the set.
+$redis->sScanAll('user:42:tags', ['COUNT' => 200], function ($members) {
+    foreach ($members as $member) {
+        // ...
+    }
+});
+```
+
+The `limit` option (default `100000`) caps the total members collected by `sScanAll()`.
+On a Redis-side error the callback receives `false`.
+
 ## Development
 
 ```

@@ -110,6 +110,8 @@ use Workerman\Timer;
  * @method static int sRem($key, ...$members, $cb = null)
  * @method static array sUnion(...$keys, $cb = null)
  * @method static false|int sUnionStore($dst, ...$keys, $cb = null)
+ * @method static array|null sScan($key, $cursor, array $options = [], $cb = null)
+ * @method static array|false|null sScanAll($key, array $options = [], $cb = null)
  * Sorted sets methods
  * @method static array bzPopMin($keys, $timeout, $cb = null)
  * @method static array bzPopMax($keys, $timeout, $cb = null)
@@ -1158,13 +1160,128 @@ class Client
     }
 
     /**
-     * sScan
+     * Incrementally iterate one set one batch of members at a time.
      *
-     * @throws Exception
+     * Reshapes Redis's `[cursor, [m1, m2, ...]]` flat reply into
+     * `['cursor' => string, 'members' => ['m1', 'm2', ...]]` — same shape as SCAN, not HSCAN.
+     * The cursor is always a string; `'0'` signals iteration complete. Non-array replies
+     * (e.g. error strings) are passed through unchanged so callers can detect errors.
+     *
+     * @param string        $key     The set key to iterate.
+     * @param string|int    $cursor  Cursor value; start with '0'.
+     * @param array         $options Recognised keys (case-insensitive): MATCH, COUNT. Unknown keys are ignored.
+     * @param callable|null $cb      function(array|mixed $reply, Client $client): void
+     * @return array|null            Coroutine mode: the formatted reply. Callback mode: null.
      */
-    public function sScan()
+    public function sScan($key, $cursor, array $options = [], $cb = null)
     {
-        throw new Exception('Not implemented');
+        $args = ['SSCAN', $key, (string)$cursor];
+        foreach ($options as $optKey => $value) {
+            $upper = \strtoupper((string)$optKey);
+            if ($upper === 'MATCH' || $upper === 'COUNT') {
+                $args[] = $upper;
+                $args[] = $value;
+            }
+        }
+        $format = function ($result) {
+            if (!\is_array($result)) {
+                return $result;
+            }
+            $cursor = isset($result[0]) ? (string)$result[0] : '0';
+            $members = (isset($result[1]) && \is_array($result[1])) ? $result[1] : [];
+            return ['cursor' => $cursor, 'members' => $members];
+        };
+        return $this->queueCommand($args, $cb, $format);
+    }
+
+    /**
+     * Drive SSCAN to completion and return every member of one set.
+     *
+     * Loops sScan() from cursor '0' until Redis returns '0', accumulating members across
+     * batches. Set members are unique by definition, but SCAN-family commands can revisit
+     * the same slot during a rehash, so the accumulator dedupes via a member-keyed map and
+     * returns `array_values($map)`. The 'limit' option (default 100000) caps the result so
+     * a growing set can't loop forever; iteration stops once the collected count reaches
+     * the limit. On a Redis-side error iteration halts and the caller receives `false`
+     * (see error()).
+     *
+     * @param string        $key     The set key to iterate.
+     * @param array         $options Same keys as sScan() (MATCH, COUNT) plus 'limit' (int).
+     * @param callable|null $cb      function(array|false $members, Client $client): void
+     * @return array|false|null      Coroutine mode: aggregated members array, or `false` on error. Callback mode: null.
+     */
+    public function sScanAll($key, array $options = [], $cb = null)
+    {
+        $limit = 100000;
+        $scanOptions = [];
+        foreach ($options as $optKey => $value) {
+            $upper = \strtoupper((string)$optKey);
+            if ($upper === 'LIMIT') {
+                $limit = (int)$value;
+                continue;
+            }
+            if ($upper === 'MATCH' || $upper === 'COUNT') {
+                $scanOptions[$upper] = $value;
+            }
+        }
+
+        // Coroutine mode: synchronous loop, return aggregated members.
+        if (!$cb && \class_exists(EventLoop::class, false)) {
+            $collected = [];
+            $cursor = '0';
+            do {
+                $reply = $this->sScan($key, $cursor, $scanOptions);
+                if (!\is_array($reply) || !isset($reply['cursor'])) {
+                    // sScan() failed; $this->_error already set by the
+                    // queueCommand error path. Signal abort to the caller.
+                    return false;
+                }
+                foreach ($reply['members'] as $member) {
+                    // Dedupe — SCAN can revisit members during a rehash.
+                    // Member used as map key; array_values() flattens at the end.
+                    $collected[(string)$member] = $member;
+                    if (\count($collected) >= $limit) {
+                        return \array_values($collected);
+                    }
+                }
+                $cursor = $reply['cursor'];
+            } while ($cursor !== '0');
+            return \array_values($collected);
+        }
+
+        // Callback mode: chain sScan() calls via nested callbacks.
+        $collected = [];
+        $self = $this;
+        $step = null;
+        $step = function ($reply) use (&$step, &$collected, $self, $key, $scanOptions, $limit, $cb) {
+            if (!\is_array($reply) || !isset($reply['cursor'])) {
+                // sScan() errored — last error is already in $self->_error.
+                // Signal abort to the user by handing them `false`, matching
+                // the rest of the client's error convention.
+                if ($cb) {
+                    \call_user_func($cb, false, $self);
+                }
+                return;
+            }
+            foreach ($reply['members'] as $member) {
+                $collected[(string)$member] = $member;
+                if (\count($collected) >= $limit) {
+                    if ($cb) {
+                        \call_user_func($cb, \array_values($collected), $self);
+                    }
+                    return;
+                }
+            }
+            if ($reply['cursor'] === '0') {
+                if ($cb) {
+                    \call_user_func($cb, \array_values($collected), $self);
+                }
+                return;
+            }
+            $self->sScan($key, $reply['cursor'], $scanOptions, $step);
+        };
+        $this->sScan($key, '0', $scanOptions, $step);
+        return null;
     }
 
     /**
