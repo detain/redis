@@ -18,9 +18,9 @@
         "workerman/workerman": "^4.1.0||^5.0.0"
     },
     "require-dev": {
-        "pestphp/pest": "^2.36 || ^3 || ^4",
-        "mockery/mockery": "^1.6.12",
-        "phpstan/phpstan": "^2.1"
+        "pestphp/pest": "*",
+        "mockery/mockery": "*",
+        "phpstan/phpstan": "*"
     },
     "suggest": {
         "revolt/event-loop": "Enables coroutine-style synchronous return values when no callback is provided."
