@@ -164,6 +164,13 @@ use Workerman\Timer;
  * Pub/sub methods
  * @method static mixed publish($channel, $message, $cb = null)
  * @method static mixed pubSub($keyword, $argument = null, $cb = null)
+ * Connection / server methods
+ * @method static string|bool ping($cb = null)
+ * @method static string|null info($section = null, $cb = null)
+ * @method static int|bool dbSize($cb = null)
+ * @method static array|bool time($cb = null)
+ * @method static bool flushDb($async = false, $cb = null)
+ * @method static bool flushAll($async = false, $cb = null)
  * Generic methods
  * @method static mixed rawCommand(...$commandAndArgs, $cb = null)
  * Transactions methods
@@ -947,6 +954,116 @@ class Client
         if (function_exists('gc_mem_caches')) {
             gc_mem_caches();
         }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | No-arg server / connection commands
+    |--------------------------------------------------------------------------
+    |
+    | Explicit methods for commands whose only wire payload is the verb itself
+    | (or the verb plus a single optional flag). __call() only pops a trailing
+    | callable when count($args) > 1 OR the method is one of a small allowlist,
+    | so calling these as $redis->ping($cb) would otherwise put the closure on
+    | the wire as a command argument. Funnelling each through queueCommand()
+    | bypasses __call() and gives PHPStan a real signature to lock onto.
+    */
+
+    /**
+     * PING — server health check. Reply is the literal string 'PONG'.
+     *
+     * @param  callable|null $cb function($reply, Client $client): void
+     * @return mixed             Coroutine mode: 'PONG'. Callback mode: null.
+     */
+    public function ping($cb = null)
+    {
+        return $this->queueCommand(['PING'], $cb);
+    }
+
+    /**
+     * INFO — server stats and metadata as a single bulk string.
+     *
+     * Optional $section narrows the report (e.g. 'server', 'memory',
+     * 'clients'). If $section is callable it is treated as the callback
+     * and no section filter is sent — this lets `$redis->info($cb)` work
+     * naturally without the caller spelling out a null section first.
+     *
+     * @param  string|callable|null $section Section name, or callback if no filter.
+     * @param  callable|null        $cb      function($reply, Client $client): void
+     * @return mixed                         Coroutine mode: the INFO bulk string. Callback mode: null.
+     */
+    public function info($section = null, $cb = null)
+    {
+        if (\is_callable($section)) {
+            $cb = $section;
+            $section = null;
+        }
+        return $this->queueCommand($section === null ? ['INFO'] : ['INFO', $section], $cb);
+    }
+
+    /**
+     * DBSIZE — number of keys in the currently selected DB.
+     *
+     * @param  callable|null $cb function($reply, Client $client): void
+     * @return mixed             Coroutine mode: integer count. Callback mode: null.
+     */
+    public function dbSize($cb = null)
+    {
+        return $this->queueCommand(['DBSIZE'], $cb);
+    }
+
+    /**
+     * TIME — server-side wall clock as a two-element array
+     * [unix_seconds, microseconds]. Both elements are returned as numeric
+     * strings (Redis bulk replies).
+     *
+     * @param  callable|null $cb function($reply, Client $client): void
+     * @return mixed             Coroutine mode: [seconds, microseconds]. Callback mode: null.
+     */
+    public function time($cb = null)
+    {
+        return $this->queueCommand(['TIME'], $cb);
+    }
+
+    /**
+     * FLUSHDB — remove every key from the currently selected DB.
+     *
+     * Pass $async = true to send `FLUSHDB ASYNC` for a non-blocking flush
+     * (the server reclaims memory in a background thread). If $async is
+     * callable it is treated as the callback and a synchronous flush is
+     * sent — mirrors how info() folds in a trailing-callback shortcut.
+     *
+     * @param  bool|callable $async true for ASYNC, or the callback.
+     * @param  callable|null $cb    function($reply, Client $client): void
+     * @return mixed                Coroutine mode: true on OK. Callback mode: null.
+     */
+    public function flushDb($async = false, $cb = null)
+    {
+        if (\is_callable($async)) {
+            $cb = $async;
+            $async = false;
+        }
+        return $this->queueCommand($async ? ['FLUSHDB', 'ASYNC'] : ['FLUSHDB'], $cb);
+    }
+
+    /**
+     * FLUSHALL — remove every key from every DB.
+     *
+     * Same $async semantics as flushDb(): pass true for `FLUSHALL ASYNC`,
+     * or pass a callable directly to shortcut into callback mode with a
+     * synchronous flush.
+     *
+     * @param  bool|callable $async true for ASYNC, or the callback.
+     * @param  callable|null $cb    function($reply, Client $client): void
+     * @return mixed                Coroutine mode: true on OK. Callback mode: null.
+     */
+    public function flushAll($async = false, $cb = null)
+    {
+        if (\is_callable($async)) {
+            $cb = $async;
+            $async = false;
+        }
+        return $this->queueCommand($async ? ['FLUSHALL', 'ASYNC'] : ['FLUSHALL'], $cb);
     }
 
     /**

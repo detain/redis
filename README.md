@@ -157,6 +157,22 @@ $redis->rawCommand('CONFIG', 'GET', 'maxmemory', function ($reply) {
 
 Calling `rawCommand()` with no args (or only a callback) throws `InvalidArgumentException` rather than sending an empty command.
 
+## Server commands
+
+Explicit wrappers for the no-arg health and admin commands: `ping()`, `info()`, `dbSize()`, `time()`, `flushDb()`, `flushAll()`. These bypass `__call()`'s trailing-callback handling (which only triggers when more than one argument is passed), so the closure goes through `queueCommand()` instead of being shipped to Redis as a bogus command arg.
+
+```php
+$redis->ping(function ($reply) {
+    // $reply === 'PONG'
+});
+
+$redis->dbSize(function ($count) {
+    // $count is an int — number of keys in the current DB
+});
+```
+
+`info($section, $cb)` accepts an optional section filter (`'server'`, `'memory'`, `'clients'`, …). `flushDb($async, $cb)` and `flushAll($async, $cb)` take an optional first arg — pass `true` to send `FLUSHDB ASYNC` / `FLUSHALL ASYNC` for a non-blocking flush, or pass the callback directly for a synchronous one.
+
 ## Development
 
 ```
