@@ -145,6 +145,18 @@ $redis->zScanAll('leaderboard:weekly', ['COUNT' => 200], function ($members) {
 The `limit` option (default `100000`) caps the total members collected by `zScanAll()`.
 On a Redis-side error the callback receives `false`.
 
+## rawCommand
+
+Escape hatch for sending any Redis or Dragonfly command verbatim — useful for verbs that don't yet have a dedicated wrapper (new server commands, custom modules, multi-word admin verbs, etc.). The args you pass are the wire payload: the first non-callback arg is the command name and the rest are its arguments. The optional trailing callable receives the reply.
+
+```php
+$redis->rawCommand('CONFIG', 'GET', 'maxmemory', function ($reply) {
+    // $reply === ['maxmemory', '0']
+});
+```
+
+Calling `rawCommand()` with no args (or only a callback) throws `InvalidArgumentException` rather than sending an empty command.
+
 ## Development
 
 ```

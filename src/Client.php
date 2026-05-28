@@ -858,6 +858,42 @@ class Client
     }
 
     /**
+     * Escape hatch for sending any Redis command verbatim.
+     *
+     * Unlike __call(), rawCommand does NOT prepend the method name to the
+     * wire payload. The args you pass ARE the wire payload — the first
+     * non-callback arg is the command name and the rest are its arguments.
+     * Use this for commands that don't yet have a dedicated wrapper:
+     * newer Redis/Dragonfly verbs, custom modules, multi-word verbs you'd
+     * rather not assemble through dispatcher(), etc.
+     *
+     * The last arg is treated as a callback if it is callable; the rest of
+     * the args are queued literally via queueCommand(). At least one arg
+     * (the command name) is required — calling rawCommand() with only a
+     * callable, or with nothing at all, throws InvalidArgumentException
+     * rather than sending an empty command to the server.
+     *
+     * Example:
+     *     $redis->rawCommand('CONFIG', 'GET', 'maxmemory', function ($reply) {
+     *         // $reply === ['maxmemory', '0']
+     *     });
+     *
+     * @param  mixed ...$args  Wire command parts; optionally a trailing callable.
+     * @return mixed           Coroutine mode: the reply. Callback mode: null.
+     */
+    public function rawCommand(...$args)
+    {
+        $cb = null;
+        if (!empty($args) && \is_callable(\end($args))) {
+            $cb = \array_pop($args);
+        }
+        if (empty($args)) {
+            throw new \InvalidArgumentException('rawCommand requires at least the command name');
+        }
+        return $this->queueCommand($args, $cb);
+    }
+
+    /**
      * @return array
      */
     protected function suspenstion()
