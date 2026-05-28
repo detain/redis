@@ -469,6 +469,75 @@ class Client
     }
 
     /**
+     * Queue a command for transmission and return immediately (callback mode)
+     * or suspend the current fiber until the reply arrives (Revolt mode).
+     *
+     * Every explicit command method should funnel through this helper so the
+     * suspension / non-suspension branches stay identical and bug-fixes apply
+     * uniformly. When Revolt's EventLoop class is loaded and no callback was
+     * provided, a Suspension is created, registered as the callback, and the
+     * current fiber is suspended; the suspension is resumed by onMessage()
+     * via the queue's stored callback.
+     *
+     * @param array         $args   The wire-level command parts, e.g. ['SET','key','value'].
+     * @param callable|null $cb     User callback signature: function($result, Client $client).
+     * @param callable|null $format Optional reshaper applied to the raw result before $cb.
+     * @return mixed                The reply when suspended; null in pure callback mode.
+     */
+    protected function queueCommand(array $args, $cb = null, $format = null)
+    {
+        $need_suspend = !$cb && \class_exists(EventLoop::class, false);
+        if ($need_suspend) {
+            [$suspension, $cb] = $this->suspenstion();
+        }
+        if ($format === null) {
+            $this->_queue[] = [$args, time(), $cb];
+        } else {
+            $this->_queue[] = [$args, time(), $cb, $format];
+        }
+        $this->process();
+        if ($need_suspend) {
+            return $suspension->suspend();
+        }
+        return null;
+    }
+
+    /**
+     * Dispatch a subcommand for a multi-verb family (CONFIG, ACL, SLOWLOG,
+     * MEMORY, COMMAND, CLUSTER, CLIENT) or a dotted module command (JSON.*,
+     * BF.*, CMS.*, TOPK.*, FT.*).
+     *
+     * The convention is: caller passes `$prefix` ending in either a space
+     * ('CLUSTER ') for subcommand verbs or a dot ('JSON.') for module
+     * commands. The first element of $args is the verb (uppercased here);
+     * the rest are command arguments. A trailing callable in $args is
+     * popped and treated as the callback.
+     *
+     * For dot-prefixed families the verb is glued onto the prefix to form a
+     * single Redis token ('JSON.SET'); for space-prefixed families the verb
+     * becomes a separate wire arg ('CLUSTER', 'INFO').
+     *
+     * @param string $prefix  Either 'FAMILY ' (space) or 'PREFIX.' (dot).
+     * @param array  $args    [verb, ...args, optional callable].
+     * @return mixed
+     */
+    protected function dispatcher($prefix, array $args)
+    {
+        $cb = null;
+        if (!empty($args) && \is_callable(\end($args))) {
+            $cb = \array_pop($args);
+        }
+        $verb = \strtoupper((string)\array_shift($args));
+        if ($prefix !== '' && $prefix[\strlen($prefix) - 1] === '.') {
+            \array_unshift($args, $prefix . $verb);
+        } else {
+            $head = \rtrim($prefix);
+            \array_unshift($args, $head, $verb);
+        }
+        return $this->queueCommand($args, $cb);
+    }
+
+    /**
      * subscribe
      *
      * @param $channels
@@ -527,8 +596,8 @@ class Client
     /**
      * select
      *
-     * @param $db
-     * @param null $cb
+     * @param int           $db
+     * @param callable|null $cb
      * @return mixed
      */
     public function select($db, $cb = null)
@@ -537,25 +606,14 @@ class Client
             $this->_db = $db;
             return $result;
         };
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $cb = $cb ?: function () {
-        };
-        $this->_queue[] = [['SELECT', $db], time(), $cb, $format];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand(['SELECT', $db], $cb ?: function () {}, $format);
     }
 
     /**
      * auth
      *
-     * @param string|array $auth
-     * @param null $cb
+     * @param string|array  $auth
+     * @param callable|null $cb
      * @return mixed
      */
     public function auth($auth, $cb = null)
@@ -564,18 +622,8 @@ class Client
             $this->_auth = $auth;
             return $result;
         };
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $cb = $cb ?: function () {
-        };
-        $this->_queue[] = [['AUTH', $auth], time(), $cb, $format];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        $args = \is_array($auth) ? \array_merge(['AUTH'], $auth) : ['AUTH', $auth];
+        return $this->queueCommand($args, $cb ?: function () {}, $format);
     }
 
     /**
@@ -588,34 +636,13 @@ class Client
      */
     public function set($key, $value, $cb = null)
     {
-        $args = func_get_args();
+        $args = \func_get_args();
         if ($cb !== null && !\is_callable($cb)) {
             $timeout = $cb;
-            $cb = null;
-            if (\count($args) > 3) {
-                $cb = $args[3];
-            }
-            $need_suspend = !$cb && class_exists(EventLoop::class, false);
-            if ($need_suspend) {
-                [$suspension, $cb] = $this->suspenstion();
-            }
-            $this->_queue[] = [['SETEX', $key, $timeout, $value], time(), $cb];
-            $this->process();
-            if ($need_suspend) {
-                return $suspension->suspend();
-            }
-            return null;
+            $cb = $args[3] ?? null;
+            return $this->queueCommand(['SETEX', $key, $timeout, $value], $cb);
         }
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $this->_queue[] = [['SET', $key, $value], time(), $cb];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand(['SET', $key, $value], $cb);
     }
 
     /**
@@ -627,34 +654,13 @@ class Client
      */
     public function incr($key, $cb = null)
     {
-        $args = func_get_args();
+        $args = \func_get_args();
         if ($cb !== null && !\is_callable($cb)) {
             $num = $cb;
-            $cb = null;
-            if (\count($args) > 2) {
-                $cb = $args[2];
-            }
-            $need_suspend = !$cb && class_exists(EventLoop::class, false);
-            if ($need_suspend) {
-                [$suspension, $cb] = $this->suspenstion();
-            }
-            $this->_queue[] = [['INCRBY', $key, $num], time(), $cb];
-            $this->process();
-            if ($need_suspend) {
-                return $suspension->suspend();
-            }
-            return null;
+            $cb = $args[2] ?? null;
+            return $this->queueCommand(['INCRBY', $key, $num], $cb);
         }
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $this->_queue[] = [['INCR', $key], time(), $cb];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand(['INCR', $key], $cb);
     }
 
 
@@ -667,34 +673,13 @@ class Client
      */
     public function decr($key, $cb = null)
     {
-        $args = func_get_args();
+        $args = \func_get_args();
         if ($cb !== null && !\is_callable($cb)) {
             $num = $cb;
-            $cb = null;
-            if (\count($args) > 2) {
-                $cb = $args[2];
-            }
-            $need_suspend = !$cb && class_exists(EventLoop::class, false);
-            if ($need_suspend) {
-                [$suspension, $cb] = $this->suspenstion();
-            }
-            $this->_queue[] = [['DECRBY', $key, $num], time(), $cb];
-            $this->process();
-            if ($need_suspend) {
-                return $suspension->suspend();
-            }
-            return null;
+            $cb = $args[2] ?? null;
+            return $this->queueCommand(['DECRBY', $key, $num], $cb);
         }
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $this->_queue[] = [['DECR', $key], time(), $cb];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand(['DECR', $key], $cb);
     }
 
     /**
@@ -715,7 +700,7 @@ class Client
 
         foreach ($options as $op => $value) {
             $args[] = $op;
-            if (!is_array($value)) {
+            if (!\is_array($value)) {
                 $args[] = $value;
                 continue;
             }
@@ -724,16 +709,7 @@ class Client
             }
         }
         \array_unshift($args, 'SORT', $key);
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $this->_queue[] = [$args, time(), $cb];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand($args, $cb);
     }
 
     /**
@@ -773,16 +749,7 @@ class Client
             $args[] = $key;
             $args[] = $value;
         }
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $this->_queue[] = [$args, time(), $cb];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand($args, $cb);
     }
 
     /**
@@ -809,21 +776,12 @@ class Client
     public function hMGet($key, array $array, $cb = null)
     {
         $format = function ($result) use ($array) {
-            if (!is_array($result)) {
+            if (!\is_array($result)) {
                 return $result;
             }
             return \array_combine($array, $result);
         };
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $this->_queue[] = [['HMGET', $key, $array], time(), $cb, $format];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand(['HMGET', $key, $array], $cb, $format);
     }
 
     /**
@@ -850,16 +808,7 @@ class Client
             }
             return $return;
         };
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $this->_queue[] = [['HGETALL', $key], time(), $cb, $format];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand(['HGETALL', $key], $cb, $format);
     }
 
     /**
@@ -874,20 +823,11 @@ class Client
     protected function keyMapCb($command, $key, array $array, $cb)
     {
         $args = [$command, $key];
-        foreach ($array as $key => $value) {
-            $args[] = $key;
+        foreach ($array as $field => $value) {
+            $args[] = $field;
             $args[] = $value;
         }
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $this->_queue[] = [$args, time(), $cb];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand($args, $cb);
     }
 
     /**
@@ -900,23 +840,13 @@ class Client
     public function __call($method, $args)
     {
         $cb = null;
-        if (count($args) > 1 || in_array($method, ['randomKey', 'multi', 'exec', 'discard'])) {
-            if (\is_callable(end($args))) {
-                $cb = array_pop($args);
+        if (\count($args) > 1 || \in_array($method, ['randomKey', 'multi', 'exec', 'discard'], true)) {
+            if (\is_callable(\end($args))) {
+                $cb = \array_pop($args);
             }
         }
-
         \array_unshift($args, \strtoupper($method));
-        $need_suspend = !$cb && class_exists(EventLoop::class, false);
-        if ($need_suspend) {
-            [$suspension, $cb] = $this->suspenstion();
-        }
-        $this->_queue[] = [$args, time(), $cb];
-        $this->process();
-        if ($need_suspend) {
-            return $suspension->suspend();
-        }
-        return null;
+        return $this->queueCommand($args, $cb);
     }
 
     /**

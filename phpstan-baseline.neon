@@ -19,12 +19,6 @@ parameters:
 			path: src/Client.php
 
 		-
-			message: '#^Negated boolean expression is always true\.$#'
-			identifier: booleanNot.alwaysTrue
-			count: 8
-			path: src/Client.php
-
-		-
 			message: '#^Parameter \#1 \$timerId of static method Workerman\\Timer\:\:del\(\) expects int, Workerman\\Timer given\.$#'
 			identifier: argument.type
 			count: 2
