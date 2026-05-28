@@ -11,9 +11,10 @@ Asynchronous Redis client for PHP, built on Workerman.
 [![PHP Version](https://img.shields.io/packagist/php-v/workerman/redis.svg)](https://php.net)
 
 [![codecov](https://codecov.io/gh/detain/redis/graph/badge.svg?token=ntRuLnxa2V)](https://codecov.io/gh/detain/redis)  
-![Sunburst](https://codecov.io/gh/detain/redis/graphs/sunburst.svg?token=ntRuLnxa2V)<sub><sub>The inner-most circle is the entire project, moving away from the center are folders then, finally, a single file. The size and color of each slice is representing the number of statements and the coverage, respectively.</sub></sub>  
-![Grid](https://codecov.io/gh/detain/redis/graphs/tree.svg?token=ntRuLnxa2V) <sub><sub>Each block represents a single file in the project. The size and color of each block is represented by the number of statements and the coverage, respectively.</sub></sub> 
-![Icicle](https://codecov.io/gh/detain/redis/graphs/icicle.svg?token=ntRuLnxa2V) <sub><sub>The top section represents the entire project. Proceeding with folders and finally individual files. The size and color of each slice is representing the number of statements and the coverage, respectively.</sub></sub>
+
+| ![Sunburst](https://codecov.io/gh/detain/redis/graphs/sunburst.svg?token=ntRuLnxa2V) | ![Grid](https://codecov.io/gh/detain/redis/graphs/tree.svg?token=ntRuLnxa2V) | ![Icicle](https://codecov.io/gh/detain/redis/graphs/icicle.svg?token=ntRuLnxa2V) |
+|------|------|------|
+| *Sunburst* <sub>The inner-most circle is the entire project, moving away from the center are folders then, finally, a single file. The size and color of each slice is representing the number of statements and the coverage, respectively.</sub> | *Grid* <sub>Each block represents a single file in the project. The size and color of each block is represented by the number of statements and the coverage, respectively.</sub> | *Icicle* <sub>The top section represents the entire project. Proceeding with folders and finally individual files. The size and color of each slice is representing the number of statements and the coverage, respectively.</sub> |
 
 
 
