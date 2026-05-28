@@ -37,9 +37,7 @@ jobs:
           sudo curl -Lo /usr/share/keyrings/dragonfly-keyring.public https://packages.dragonflydb.io/pgp-key.public
           sudo curl -Lo /etc/apt/sources.list.d/dragonfly.sources https://packages.dragonflydb.io/dragonfly.sources
           sudo apt-get update
-          sudo systemctl stop redis
-          sudo apt-get remove -y --purge redis
-          sudo apt-get install -y dragonfly
+          sudo apt-get install -y dragonfly lsof
           sudo mkdir -p /var/run/dragonfly
           sudo chown dfly:dfly /var/run/dragonfly
           sudo -u dfly /usr/bin/dragonfly --flagfile=/etc/dragonfly/dragonfly.conf
