@@ -43,6 +43,7 @@ use Workerman\Timer;
  * @method static string setRange($key, $offset, $value, $cb = null)
  * @method static string substr($key, $start, $end, $cb = null)
  * @method static int strLen($key, $cb = null)
+ * @method static array sortRo($key, $options = [], $cb = null)
  * Keys methods
  * @method static int copy($src, $dst, array $options = [], $cb = null)
  * @method static int del(...$keys, $cb = null)
@@ -85,6 +86,15 @@ use Workerman\Timer;
  * @method static string|array hRandField($key, $count = null, $withValues = false, $cb = null)
  * @method static array|null hScan($key, $cursor, array $options = [], $cb = null)
  * @method static array|false|null hScanAll($key, array $options = [], $cb = null)
+ * @method static array hExpire($key, $seconds, $fieldsOrOptions, ...$fields, $cb = null)
+ * @method static array hPersist($key, $fieldsOrOptions, ...$fields, $cb = null)
+ * @method static array hExpireAt($key, $timestamp, $fieldsOrOptions, ...$fields, $cb = null)
+ * @method static array hTtl($key, $fieldsOrOptions, ...$fields, $cb = null)
+ * @method static array hExpireTime($key, $fieldsOrOptions, ...$fields, $cb = null)
+ * @method static array hPExpire($key, $milliseconds, $fieldsOrOptions, ...$fields, $cb = null)
+ * @method static array hPExpireAt($key, $timestamp, $fieldsOrOptions, ...$fields, $cb = null)
+ * @method static array hPTtl($key, $fieldsOrOptions, ...$fields, $cb = null)
+ * @method static array hPExpireTime($key, $fieldsOrOptions, ...$fields, $cb = null)
  * Lists methods
  * @method static array blPop($keys, $timeout, $cb = null)
  * @method static array brPop($keys, $timeout, $cb = null)
@@ -272,13 +282,30 @@ use Workerman\Timer;
  * @method static mixed cluster(...$args, $cb = null)
  * @method static int lastSave($cb = null)
  * @method static bool save($cb = null)
+ * @method static bool bgSave($schedule = false, $cb = null)
  * @method static array role($cb = null)
  * @method static bool shutdown($mode = 'SAVE', $cb = null)
  * @method static bool replicaOf($host, $port, $cb = null)
  * @method static bool slaveOf($host, $port, $cb = null)
  * @method static mixed debug(...$args, $cb = null)
+ * @method static mixed module(...$args)
+ * @method static array moduleList($cb = null)
  * @method static int delEx(...$keys, $cb = null) — Dragonfly extension
  * @method static string digest($cb = null) — Dragonfly extension
+ * RedisSearch (FT) module — supported by Dragonfly
+ * @method static mixed ft(...$args)
+ * @method static bool ftCreate($index, ...$args)
+ * @method static array ftSearch($index, $query, ...$optionsAndCb)
+ * @method static array ftAggregate($index, $query, ...$optionsAndCb)
+ * @method static bool ftDropIndex($index, $deleteDocs = false, $cb = null)
+ * @method static array ftInfo($index, $cb = null)
+ * @method static array ftList($cb = null)
+ * @method static bool ftAlter($index, ...$args)
+ * @method static mixed ftConfig(...$args)
+ * @method static array ftTagVals($index, $field, $cb = null)
+ * @method static array ftSynDump($index, $cb = null)
+ * @method static bool ftSynUpdate($index, $groupId, ...$termsAndCb)
+ * @method static array ftProfile($index, ...$args)
  * Generic methods
  * @method static mixed rawCommand(...$commandAndArgs, $cb = null)
  * Transactions methods
@@ -879,6 +906,50 @@ class Client
             }
         }
         \array_unshift($args, 'SORT', $key);
+        return $this->queueCommand($args, $cb);
+    }
+
+    /**
+     * SORT_RO — read-only variant of SORT.
+     *
+     * Same wire shape as sort() but the verb carries an underscore, which
+     * __call()'s strtoupper() can't produce — it would send `SORTRO`. The
+     * option-flattening loop mirrors sort() (each $op contributes its
+     * literal name and either a scalar or a flat list of sub-values).
+     *
+     * Pass a callable as $options to shortcut into callback mode with the
+     * default `[]` options — mirrors how flushDb() / hello() fold a
+     * trailing-callback shortcut.
+     *
+     * SORT_RO is subject to the same numeric-vs-alpha gotcha as SORT: by
+     * default the server tries to sort elements as numbers, so callers
+     * with non-numeric values must include `['ALPHA' => '']` or similar
+     * in $options. The empty-value convention matches sort() — flag-only
+     * options are spelled as `'ALPHA' => ''` because the loop emits each
+     * key followed by its value.
+     *
+     * @param  string         $key
+     * @param  array|callable $options Flat associative array of sort options, or the callback.
+     * @param  callable|null  $cb      function(array $reply, Client $client): void
+     * @return mixed                   Coroutine mode: sorted list. Callback mode: null.
+     */
+    public function sortRo($key, $options = [], $cb = null)
+    {
+        if (\is_callable($options)) {
+            $cb = $options;
+            $options = [];
+        }
+        $args = ['SORT_RO', $key];
+        foreach ($options as $op => $value) {
+            $args[] = $op;
+            if (\is_array($value)) {
+                foreach ($value as $sub_value) {
+                    $args[] = $sub_value;
+                }
+                continue;
+            }
+            $args[] = $value;
+        }
         return $this->queueCommand($args, $cb);
     }
 
@@ -2876,6 +2947,351 @@ class Client
         };
         $this->zScan($key, '0', $scanOptions, $step);
         return null;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Tier 9 — partial-support commands
+    |--------------------------------------------------------------------------
+    |
+    | A small grab-bag of commands that needed dedicated wrappers either to
+    | sidestep the no-arg-callback bug in __call() (BGSAVE), to spell an
+    | underscore the strtoupper() pipeline can't produce (SORT_RO — already
+    | above), or to drive a module / dotted command family (FT.*, MODULE).
+    |
+    | The HEXPIRE family (HEXPIRE / HPERSIST / HTTL / HEXPIREAT / HEXPIRETIME
+    | / HPEXPIRE / HPTTL) does NOT get explicit methods: every member is a
+    | multi-arg verb so __call()'s count > 1 branch correctly pops the
+    | trailing callable, and the @method declarations above lock in IDE
+    | autocomplete. Dragonfly currently only ships HEXPIRE and HTTL; the
+    | rest reply -ERR unknown command and the test suite skips them.
+    */
+
+    /**
+     * BGSAVE — request an asynchronous background snapshot.
+     *
+     * Without an explicit method, `$redis->bgSave($cb)` lands in __call()'s
+     * count == 1 path where the closure is sent on the wire as a BGSAVE
+     * argument rather than being treated as the callback — same shape bug
+     * as PING / INFO / DBSIZE.
+     *
+     * Pass `$schedule = true` to send `BGSAVE SCHEDULE`, deferring the
+     * snapshot until any in-progress AOF rewrite completes. A callable in
+     * the first slot is folded in as the callback with a regular (non-
+     * scheduled) BGSAVE, matching the flushDb()/info() shortcut style.
+     *
+     * @param  bool|callable $schedule true for SCHEDULE, or the callback.
+     * @param  callable|null $cb       function($reply, Client $client): void
+     * @return mixed                   Coroutine mode: true on +OK. Callback mode: null.
+     */
+    public function bgSave($schedule = false, $cb = null)
+    {
+        if (\is_callable($schedule)) {
+            $cb = $schedule;
+            $schedule = false;
+        }
+        return $this->queueCommand($schedule ? ['BGSAVE', 'SCHEDULE'] : ['BGSAVE'], $cb);
+    }
+
+    /**
+     * MODULE — module-management subcommand family.
+     *
+     * Wire form: `MODULE <verb> [args...]`. Typical verbs are LIST, LOAD,
+     * UNLOAD. On Dragonfly modules are statically linked: LIST reports
+     * loaded modules (ReJSON, search, …) but LOAD / UNLOAD return errors.
+     *
+     * A trailing callable is taken as the callback by the dispatcher.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable]
+     * @return mixed
+     */
+    public function module(...$args)
+    {
+        return $this->dispatcher('MODULE ', $args);
+    }
+
+    /**
+     * MODULE LIST — return the currently loaded modules.
+     *
+     * Reply shape on Dragonfly: a flat array of `[name, <module>, ver,
+     * <int>, name, <module>, ver, <int>, ...]` — pairs of name/value
+     * metadata per module. The format-callback layer doesn't reshape this;
+     * callers can walk it as-is or use a helper.
+     *
+     * @param  callable|null $cb function(array $reply, Client $client): void
+     * @return mixed             Coroutine mode: module list. Callback mode: null.
+     */
+    public function moduleList($cb = null)
+    {
+        return $this->module('LIST', $cb);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | RedisSearch (FT) module — supported by Dragonfly
+    |--------------------------------------------------------------------------
+    |
+    | Dragonfly ships a search module that implements the RedisSearch
+    | `FT.*` command surface (see MODULE LIST for the version). Same dotted
+    | dispatch pattern as JSON.* / BF.* / CMS.* / TOPK.*: the dispatcher
+    | glues the verb onto `FT.` to form a single Redis token, e.g.
+    | `FT.CREATE`, `FT.SEARCH`, `FT.AGGREGATE`.
+    |
+    | The ft(...$args) dispatcher accepts arbitrary verbs (including the
+    | underscore-prefixed `_LIST` administrative variant). The shortcut
+    | wrappers cover the most-common surface for IDE autocomplete.
+    */
+
+    /**
+     * FT.* — RedisSearch module dispatcher.
+     *
+     * Wire form: `FT.<verb> [args...]`. The first positional arg is the
+     * verb (uppercased and glued onto the `FT.` prefix); a trailing
+     * callable is taken as the callback. A trailing null is treated as
+     * "no callback" so the typed shortcuts can forward their `$cb = null`
+     * defaults uniformly.
+     *
+     * Note: FT._LIST has a leading underscore that strtoupper() preserves
+     * intact, so ftList() can go through this dispatcher path.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable or trailing null]
+     * @return mixed
+     */
+    public function ft(...$args)
+    {
+        if (!empty($args) && \end($args) === null) {
+            \array_pop($args);
+        }
+        return $this->dispatcher('FT.', $args);
+    }
+
+    /**
+     * FT.CREATE — define a new index over hash or JSON documents.
+     *
+     * Wire form is highly variadic — typical usage is
+     * `FT.CREATE idx ON HASH PREFIX 1 doc: SCHEMA name TEXT score NUMERIC`.
+     * All args after $index are forwarded verbatim; a trailing callable is
+     * popped and treated as the callback.
+     *
+     * @param  string $index
+     * @param  mixed  ...$args index-definition tokens, optional trailing callable.
+     * @return mixed
+     */
+    public function ftCreate($index, ...$args)
+    {
+        $cb = null;
+        if (!empty($args) && \is_callable(\end($args))) {
+            $cb = \array_pop($args);
+        }
+        $wire = ['CREATE', $index, ...$args, $cb];
+        return $this->ft(...$wire);
+    }
+
+    /**
+     * FT.SEARCH — query an index.
+     *
+     * Reply shape: `[total, doc1Key, [doc1Field, doc1Value, ...], doc2Key,
+     * [doc2Field, doc2Value, ...], ...]` for HASH indexes. The flat shape
+     * makes incremental decoding trivial but callers usually want to walk
+     * the result in steps of 2 (key + flat-field-array).
+     *
+     * Optional tokens (LIMIT offset count, RETURN n field..., NOCONTENT,
+     * SORTBY, etc.) flow through $optionsAndCb verbatim. A trailing
+     * callable is popped and treated as the callback.
+     *
+     * @param  string $index
+     * @param  string $query
+     * @param  mixed  ...$optionsAndCb FT.SEARCH option tokens, optional trailing callable.
+     * @return mixed
+     */
+    public function ftSearch($index, $query, ...$optionsAndCb)
+    {
+        $cb = null;
+        if (!empty($optionsAndCb) && \is_callable(\end($optionsAndCb))) {
+            $cb = \array_pop($optionsAndCb);
+        }
+        $wire = ['SEARCH', $index, $query, ...$optionsAndCb, $cb];
+        return $this->ft(...$wire);
+    }
+
+    /**
+     * FT.AGGREGATE — run an aggregation pipeline over an index.
+     *
+     * Wire form: `FT.AGGREGATE idx query [GROUPBY ...] [REDUCE ...] [SORTBY
+     * ...] [LIMIT ...]`. Reply shape is roughly `[count, [field, value,
+     * ...], [field, value, ...], ...]`.
+     *
+     * @param  string $index
+     * @param  string $query
+     * @param  mixed  ...$optionsAndCb Pipeline tokens, optional trailing callable.
+     * @return mixed
+     */
+    public function ftAggregate($index, $query, ...$optionsAndCb)
+    {
+        $cb = null;
+        if (!empty($optionsAndCb) && \is_callable(\end($optionsAndCb))) {
+            $cb = \array_pop($optionsAndCb);
+        }
+        $wire = ['AGGREGATE', $index, $query, ...$optionsAndCb, $cb];
+        return $this->ft(...$wire);
+    }
+
+    /**
+     * FT.DROPINDEX — delete an index.
+     *
+     * Pass `$deleteDocs = true` to also remove the indexed documents (the
+     * `DD` flag). A callable in the first slot folds in as the callback
+     * with the documents preserved.
+     *
+     * @param  string        $index
+     * @param  bool|callable $deleteDocs true to add `DD`, or the callback.
+     * @param  callable|null $cb         function($reply, Client $client): void
+     * @return mixed
+     */
+    public function ftDropIndex($index, $deleteDocs = false, $cb = null)
+    {
+        if (\is_callable($deleteDocs)) {
+            $cb = $deleteDocs;
+            $deleteDocs = false;
+        }
+        return $deleteDocs
+            ? $this->ft('DROPINDEX', $index, 'DD', $cb)
+            : $this->ft('DROPINDEX', $index, $cb);
+    }
+
+    /**
+     * FT.INFO — return metadata about an index as a flat
+     * `[key, value, key, value, ...]` array.
+     *
+     * @param  string        $index
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function ftInfo($index, $cb = null)
+    {
+        return $this->ft('INFO', $index, $cb);
+    }
+
+    /**
+     * FT._LIST — list the names of every defined index.
+     *
+     * The administrative verb has a leading underscore that survives
+     * strtoupper() unchanged, so dispatcher() forwards it intact.
+     *
+     * @param  callable|null $cb function(array $reply, Client $client): void
+     * @return mixed             Coroutine mode: list of index names. Callback mode: null.
+     */
+    public function ftList($cb = null)
+    {
+        return $this->ft('_LIST', $cb);
+    }
+
+    /**
+     * FT.ALTER — add a field to an existing index.
+     *
+     * Wire form: `FT.ALTER idx SCHEMA ADD field type [options...]`. All
+     * args after $index pass through verbatim; a trailing callable is
+     * popped and treated as the callback.
+     *
+     * @param  string $index
+     * @param  mixed  ...$args ALTER tokens, optional trailing callable.
+     * @return mixed
+     */
+    public function ftAlter($index, ...$args)
+    {
+        $cb = null;
+        if (!empty($args) && \is_callable(\end($args))) {
+            $cb = \array_pop($args);
+        }
+        $wire = ['ALTER', $index, ...$args, $cb];
+        return $this->ft(...$wire);
+    }
+
+    /**
+     * FT.CONFIG — module-wide configuration subcommand.
+     *
+     * Wire form: `FT.CONFIG <verb> <option> [value]`. Typical verbs are
+     * GET, SET, HELP. Reply shape varies by Dragonfly version — older
+     * builds return a flat `[option, value]`, newer ones a list of pairs.
+     * Callers should inspect with var_dump() the first time.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable]
+     * @return mixed
+     */
+    public function ftConfig(...$args)
+    {
+        $cb = null;
+        if (!empty($args) && \is_callable(\end($args))) {
+            $cb = \array_pop($args);
+        }
+        $wire = ['CONFIG', ...$args, $cb];
+        return $this->ft(...$wire);
+    }
+
+    /**
+     * FT.TAGVALS — return the distinct values of a TAG field in an index.
+     *
+     * @param  string        $index
+     * @param  string        $field
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function ftTagVals($index, $field, $cb = null)
+    {
+        return $this->ft('TAGVALS', $index, $field, $cb);
+    }
+
+    /**
+     * FT.SYNDUMP — dump the synonym map of an index.
+     *
+     * @param  string        $index
+     * @param  callable|null $cb
+     * @return mixed
+     */
+    public function ftSynDump($index, $cb = null)
+    {
+        return $this->ft('SYNDUMP', $index, $cb);
+    }
+
+    /**
+     * FT.SYNUPDATE — add or update a synonym group on an index.
+     *
+     * Wire form: `FT.SYNUPDATE idx groupId term1 [term2 ...]`. A trailing
+     * callable is popped and treated as the callback.
+     *
+     * @param  string $index
+     * @param  string $groupId
+     * @param  mixed  ...$termsAndCb terms..., optional trailing callable.
+     * @return mixed
+     */
+    public function ftSynUpdate($index, $groupId, ...$termsAndCb)
+    {
+        $cb = null;
+        if (!empty($termsAndCb) && \is_callable(\end($termsAndCb))) {
+            $cb = \array_pop($termsAndCb);
+        }
+        $wire = ['SYNUPDATE', $index, $groupId, ...$termsAndCb, $cb];
+        return $this->ft(...$wire);
+    }
+
+    /**
+     * FT.PROFILE — execute a SEARCH or AGGREGATE with timing information.
+     *
+     * Wire form: `FT.PROFILE idx SEARCH|AGGREGATE [LIMITED] QUERY query
+     * [args...]`. All args after $index pass through verbatim.
+     *
+     * @param  string $index
+     * @param  mixed  ...$args profile spec tokens, optional trailing callable.
+     * @return mixed
+     */
+    public function ftProfile($index, ...$args)
+    {
+        $cb = null;
+        if (!empty($args) && \is_callable(\end($args))) {
+            $cb = \array_pop($args);
+        }
+        $wire = ['PROFILE', $index, ...$args, $cb];
+        return $this->ft(...$wire);
     }
 
 }
