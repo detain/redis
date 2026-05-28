@@ -221,6 +221,22 @@ use Workerman\Timer;
  * @method static bool flushAll($async = false, $cb = null)
  * @method static string echo($message, $cb = null)
  * @method static array hello($protover = null, $cb = null)
+ * Server administration
+ * @method static mixed config(...$args, $cb = null)
+ * @method static mixed acl(...$args, $cb = null)
+ * @method static mixed slowLog(...$args, $cb = null)
+ * @method static mixed memory(...$args, $cb = null)
+ * @method static mixed command(...$args, $cb = null)
+ * @method static mixed cluster(...$args, $cb = null)
+ * @method static int lastSave($cb = null)
+ * @method static bool save($cb = null)
+ * @method static array role($cb = null)
+ * @method static bool shutdown($mode = 'SAVE', $cb = null)
+ * @method static bool replicaOf($host, $port, $cb = null)
+ * @method static bool slaveOf($host, $port, $cb = null)
+ * @method static mixed debug(...$args, $cb = null)
+ * @method static int delEx(...$keys, $cb = null) — Dragonfly extension
+ * @method static string digest($cb = null) — Dragonfly extension
  * Generic methods
  * @method static mixed rawCommand(...$commandAndArgs, $cb = null)
  * Transactions methods
@@ -1367,6 +1383,212 @@ class Client
             $args[] = $extra;
         }
         return $this->queueCommand($args, $cb);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Server administration — multi-verb dispatchers
+    |--------------------------------------------------------------------------
+    |
+    | CONFIG / ACL / SLOWLOG / MEMORY / COMMAND / CLUSTER all share the same
+    | wire shape: a fixed family verb followed by a subcommand verb and that
+    | subcommand's arguments. Each thin wrapper forwards to dispatcher() with
+    | the space-suffixed family prefix; the dispatcher pops a trailing
+    | callable, uppercases the next arg as the verb, and queues the result.
+    |
+    | Calling these with no verb (e.g. $redis->command($cb)) sends the bare
+    | family command — useful for COMMAND (returns the full command table).
+    | command() special-cases that path because dispatcher()'s array_shift
+    | would otherwise produce an empty verb token on the wire.
+    */
+
+    /**
+     * CONFIG — server configuration subcommand family.
+     *
+     * Wire form: `CONFIG <verb> [args...]`. Typical verbs are GET, SET,
+     * RESETSTAT, REWRITE. A trailing callable is taken as the callback.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable]
+     * @return mixed
+     */
+    public function config(...$args)
+    {
+        return $this->dispatcher('CONFIG ', $args);
+    }
+
+    /**
+     * ACL — access control list subcommand family.
+     *
+     * Wire form: `ACL <verb> [args...]`. Typical verbs are WHOAMI, LIST,
+     * GETUSER, SETUSER, CAT, USERS, LOG. A trailing callable is taken as
+     * the callback.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable]
+     * @return mixed
+     */
+    public function acl(...$args)
+    {
+        return $this->dispatcher('ACL ', $args);
+    }
+
+    /**
+     * SLOWLOG — slow-command log subcommand family.
+     *
+     * Wire form: `SLOWLOG <verb> [args...]`. Typical verbs are GET, LEN,
+     * RESET, HELP. A trailing callable is taken as the callback.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable]
+     * @return mixed
+     */
+    public function slowLog(...$args)
+    {
+        return $this->dispatcher('SLOWLOG ', $args);
+    }
+
+    /**
+     * MEMORY — memory introspection subcommand family.
+     *
+     * Wire form: `MEMORY <verb> [args...]`. Typical verbs are USAGE,
+     * STATS, DOCTOR, MALLOC-STATS, PURGE. A trailing callable is taken
+     * as the callback.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable]
+     * @return mixed
+     */
+    public function memory(...$args)
+    {
+        return $this->dispatcher('MEMORY ', $args);
+    }
+
+    /**
+     * COMMAND — command-table introspection family.
+     *
+     * Wire form: `COMMAND [<verb> [args...]]`. Calling with only a
+     * callback (or with no args at all) sends the bare `COMMAND` form
+     * which returns the full command table — dispatcher()'s verb-shift
+     * would otherwise leave an empty token on the wire, so this method
+     * special-cases the no-verb path.
+     *
+     * @param  mixed ...$args [optional verb, ...args, optional callable]
+     * @return mixed
+     */
+    public function command(...$args)
+    {
+        $cb = null;
+        if (!empty($args) && \is_callable(\end($args))) {
+            $cb = \array_pop($args);
+        }
+        if (empty($args)) {
+            return $this->queueCommand(['COMMAND'], $cb);
+        }
+        // Re-attach the callback (if any) so dispatcher() can pop it back off.
+        if ($cb !== null) {
+            $args[] = $cb;
+        }
+        return $this->dispatcher('COMMAND ', $args);
+    }
+
+    /**
+     * CLUSTER — cluster bus / topology subcommand family.
+     *
+     * Wire form: `CLUSTER <verb> [args...]`. Typical verbs are INFO,
+     * NODES, MYID, SLOTS, SHARDS, COUNT-FAILURE-REPORTS, RESET. A
+     * trailing callable is taken as the callback.
+     *
+     * @param  mixed ...$args [verb, ...args, optional callable]
+     * @return mixed
+     */
+    public function cluster(...$args)
+    {
+        return $this->dispatcher('CLUSTER ', $args);
+    }
+
+    /**
+     * LASTSAVE — unix timestamp of the last successful RDB snapshot.
+     *
+     * @param  callable|null $cb function(int $reply, Client $client): void
+     * @return mixed             Coroutine mode: unix seconds. Callback mode: null.
+     */
+    public function lastSave($cb = null)
+    {
+        return $this->queueCommand(['LASTSAVE'], $cb);
+    }
+
+    /**
+     * SAVE — synchronously snapshot the dataset to disk.
+     *
+     * The server blocks while writing; on Dragonfly the snapshot path is
+     * non-blocking but still takes wall-clock time on large datasets.
+     *
+     * @param  callable|null $cb function($reply, Client $client): void
+     * @return mixed             Coroutine mode: true on +OK. Callback mode: null.
+     */
+    public function save($cb = null)
+    {
+        return $this->queueCommand(['SAVE'], $cb);
+    }
+
+    /**
+     * ROLE — replication role of this server, as an array.
+     *
+     * Reply shape varies by role: master returns ['master', repl_offset,
+     * [[ip, port, offset], ...]], slave returns ['slave', master_ip,
+     * master_port, link_state, repl_offset].
+     *
+     * @param  callable|null $cb function(array $reply, Client $client): void
+     * @return mixed             Coroutine mode: role tuple. Callback mode: null.
+     */
+    public function role($cb = null)
+    {
+        return $this->queueCommand(['ROLE'], $cb);
+    }
+
+    /**
+     * SHUTDOWN — ask the server to terminate.
+     *
+     * Default mode is SAVE (perform an RDB snapshot first); pass 'NOSAVE'
+     * to skip persistence. The server normally closes the socket and exits
+     * before replying, so the callback may never fire — this is a normal
+     * SHUTDOWN behaviour, not a client bug. The internal $_quitting flag
+     * is set so the onClose handler does NOT auto-reconnect after the
+     * server-side close.
+     *
+     * DANGER: this stops the Redis/Dragonfly process. Test suites must not
+     * call shutdown() against a shared server.
+     *
+     * @param  string|callable $mode 'SAVE' (default) or 'NOSAVE', or the callback.
+     * @param  callable|null   $cb   function($reply, Client $client): void
+     * @return mixed                 Reply rarely arrives; usually null.
+     */
+    public function shutdown($mode = 'SAVE', $cb = null)
+    {
+        if (\is_callable($mode)) {
+            $cb = $mode;
+            $mode = 'SAVE';
+        }
+        // Suppress the auto-reconnect once the server hangs up.
+        $this->_quitting = true;
+        return $this->queueCommand(['SHUTDOWN', $mode], $cb);
+    }
+
+    /**
+     * DIGEST — Dragonfly-specific hash digest of the dataset.
+     *
+     * The reply is a hex string covering the current DB state. Provided as
+     * an explicit method (rather than relying on __call) because the
+     * no-arg-plus-callback shape `$redis->digest($cb)` would otherwise
+     * land in __call()'s count==1 path where the callable is sent on the
+     * wire instead of being treated as the callback.
+     *
+     * Note: this is a Dragonfly extension. Stock Redis returns -ERR
+     * unknown command and the callback receives `false`.
+     *
+     * @param  callable|null $cb function(string|false $reply, Client $client): void
+     * @return mixed             Coroutine mode: the hex digest string. Callback mode: null.
+     */
+    public function digest($cb = null)
+    {
+        return $this->queueCommand(['DIGEST'], $cb);
     }
 
     /**
