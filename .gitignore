@@ -16,3 +16,6 @@ clover.xml
 .phpunit.coverage/
 .caliber/
 async_plan.md
+redis_start_prompt.md
+tests/Support/*.log
+tests/Support/*.pid

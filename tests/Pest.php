@@ -12,4 +12,5 @@
 |
 */
 
-uses(\Tests\TestCase::class)->in('Unit', 'Feature');
+uses(\Tests\TestCase::class)->in('Unit');
+uses(\Tests\RedisTestCase::class)->in('Feature');
