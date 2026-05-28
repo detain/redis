@@ -77,6 +77,28 @@ $redis->scanAll(['MATCH' => 'session:*', 'COUNT' => 200], function ($keys) {
 The `limit` option (default `100000`) caps the total keys collected by `scanAll()` so a growing keyspace can't loop forever.
 On a Redis-side error the callback receives `false`.
 
+## HSCAN
+
+Non-blocking iterator over a single hash's fields. `hScan()` wraps a single `HSCAN` call;
+`hScanAll()` drives the cursor loop and returns every field=>value pair as an associative array.
+
+```php
+// One step — pass the cursor through yourself.
+$redis->hScan('user:42:meta', '0', ['MATCH' => 'pref_*', 'COUNT' => 100], function ($reply) {
+    // $reply === ['cursor' => '17', 'fields' => ['pref_theme' => 'dark', ...]]
+});
+
+// Iterator helper — collects every field=>value pair for the hash.
+$redis->hScanAll('user:42:meta', ['COUNT' => 200], function ($fields) {
+    foreach ($fields as $field => $value) {
+        // ...
+    }
+});
+```
+
+The `limit` option (default `100000`) caps the total fields collected by `hScanAll()`.
+On a Redis-side error the callback receives `false`.
+
 ## Development
 
 ```

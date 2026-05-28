@@ -75,6 +75,8 @@ use Workerman\Timer;
  * @method static int hIncrBy($key, $hashKey, $value, $cb = null)
  * @method static float hIncrByFloat($key, $hashKey, $value, $cb = null)
  * @method static int hStrLen($key, $hashKey, $cb = null)
+ * @method static array|null hScan($key, $cursor, array $options = [], $cb = null)
+ * @method static array|false|null hScanAll($key, array $options = [], $cb = null)
  * Lists methods
  * @method static array blPop($keys, $timeout, $cb = null)
  * @method static array brPop($keys, $timeout, $cb = null)
@@ -1025,17 +1027,138 @@ class Client
     }
 
     /**
-     * hScan
+     * Incrementally iterate one hash one batch of fields at a time.
      *
-     * @throws Exception
+     * Reshapes Redis's `[cursor, [f1, v1, f2, v2, ...]]` flat reply into
+     * `['cursor' => string, 'fields' => ['f1' => 'v1', ...]]`. The cursor is always a
+     * string; `'0'` signals iteration complete. Non-array replies (e.g. error strings)
+     * are passed through unchanged so callers can detect errors.
+     *
+     * @param string        $key     The hash key to iterate.
+     * @param string|int    $cursor  Cursor value; start with '0'.
+     * @param array         $options Recognised keys (case-insensitive): MATCH, COUNT. Unknown keys are ignored.
+     * @param callable|null $cb      function(array|mixed $reply, Client $client): void
+     * @return array|null            Coroutine mode: the formatted reply. Callback mode: null.
      */
-    public function hScan()
+    public function hScan($key, $cursor, array $options = [], $cb = null)
     {
-        throw new Exception('Not implemented');
+        $args = ['HSCAN', $key, (string)$cursor];
+        foreach ($options as $optKey => $value) {
+            $upper = \strtoupper((string)$optKey);
+            if ($upper === 'MATCH' || $upper === 'COUNT') {
+                $args[] = $upper;
+                $args[] = $value;
+            }
+        }
+        $format = function ($result) {
+            if (!\is_array($result)) {
+                return $result;
+            }
+            $cursor = isset($result[0]) ? (string)$result[0] : '0';
+            $fields = [];
+            if (isset($result[1]) && \is_array($result[1])) {
+                $current = '';
+                foreach ($result[1] as $index => $item) {
+                    if ($index % 2 === 0) {
+                        $current = $item;
+                        continue;
+                    }
+                    $fields[$current] = $item;
+                }
+            }
+            return ['cursor' => $cursor, 'fields' => $fields];
+        };
+        return $this->queueCommand($args, $cb, $format);
     }
 
     /**
-     * hScan
+     * Drive HSCAN to completion and return every field=>value pair for one hash.
+     *
+     * Loops hScan() from cursor '0' until Redis returns '0', merging field=>value pairs
+     * across batches into a single associative array. The 'limit' option (default 100000)
+     * caps the result so a growing hash can't loop forever; iteration stops once the
+     * collected count reaches the limit. On a Redis-side error iteration halts and the
+     * caller receives `false` (see error()).
+     *
+     * @param string        $key     The hash key to iterate.
+     * @param array         $options Same keys as hScan() (MATCH, COUNT) plus 'limit' (int).
+     * @param callable|null $cb      function(array|false $fields, Client $client): void
+     * @return array|false|null      Coroutine mode: aggregated field=>value array, or `false` on error. Callback mode: null.
+     */
+    public function hScanAll($key, array $options = [], $cb = null)
+    {
+        $limit = 100000;
+        $scanOptions = [];
+        foreach ($options as $optKey => $value) {
+            $upper = \strtoupper((string)$optKey);
+            if ($upper === 'LIMIT') {
+                $limit = (int)$value;
+                continue;
+            }
+            if ($upper === 'MATCH' || $upper === 'COUNT') {
+                $scanOptions[$upper] = $value;
+            }
+        }
+
+        // Coroutine mode: synchronous loop, return aggregated fields.
+        if (!$cb && \class_exists(EventLoop::class, false)) {
+            $collected = [];
+            $cursor = '0';
+            do {
+                $reply = $this->hScan($key, $cursor, $scanOptions);
+                if (!\is_array($reply) || !isset($reply['cursor'])) {
+                    // hScan() failed; $this->_error already set by the
+                    // queueCommand error path. Signal abort to the caller.
+                    return false;
+                }
+                foreach ($reply['fields'] as $field => $value) {
+                    $collected[$field] = $value;
+                    if (\count($collected) >= $limit) {
+                        return $collected;
+                    }
+                }
+                $cursor = $reply['cursor'];
+            } while ($cursor !== '0');
+            return $collected;
+        }
+
+        // Callback mode: chain hScan() calls via nested callbacks.
+        $collected = [];
+        $self = $this;
+        $step = null;
+        $step = function ($reply) use (&$step, &$collected, $self, $key, $scanOptions, $limit, $cb) {
+            if (!\is_array($reply) || !isset($reply['cursor'])) {
+                // hScan() errored — last error is already in $self->_error.
+                // Signal abort to the user by handing them `false`, matching
+                // the rest of the client's error convention.
+                if ($cb) {
+                    \call_user_func($cb, false, $self);
+                }
+                return;
+            }
+            foreach ($reply['fields'] as $field => $value) {
+                $collected[$field] = $value;
+                if (\count($collected) >= $limit) {
+                    if ($cb) {
+                        \call_user_func($cb, $collected, $self);
+                    }
+                    return;
+                }
+            }
+            if ($reply['cursor'] === '0') {
+                if ($cb) {
+                    \call_user_func($cb, $collected, $self);
+                }
+                return;
+            }
+            $self->hScan($key, $reply['cursor'], $scanOptions, $step);
+        };
+        $this->hScan($key, '0', $scanOptions, $step);
+        return null;
+    }
+
+    /**
+     * sScan
      *
      * @throws Exception
      */
@@ -1045,7 +1168,7 @@ class Client
     }
 
     /**
-     * hScan
+     * zScan
      *
      * @throws Exception
      */
