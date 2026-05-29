@@ -339,6 +339,28 @@ iterator helper that supports both callback and Revolt coroutine modes:
   timeout — verified flake-free across 5 consecutive runs per engine.
   `Client.php` merged **75.26% → 75.79%**; total merged **77.45% → 77.93%**.
 
+#### Command-surface completeness + error-path coverage — Feature tests
+
+- Added `tests/Feature/SurfaceCompletenessTest.php` (16 cases) covering
+  `@method`-declared verbs with no prior assertion — `bitCount`,
+  `blPop`/`brPop`/`bRPopLPush` and `bzPopMax`/`bzPopMin` (exercised on
+  pre-populated keys so the blocking path returns immediately, never hangs),
+  `zRangeByLex`/`zRevRangeByScore`/`zRemRangeByRank`/`zRemRangeByScore`/
+  `zinterstore`/`zunionstore`, the HyperLogLog `pfAdd`/`pfCount`/`pfMerge`, the geo
+  `geoDist`/`geoHash`/`geoPos`, `watch`/`unwatch`, and the stream consumer-group
+  `xAck`/`xClaim`/`xInfo`/`xPending`. Assertions pin real values (bit counts,
+  popped members, cardinalities, distances, geohashes, pending/acked counts).
+- Added `tests/Feature/ErrorRepliesTest.php` (6 cases) asserting the client's
+  error-delivery contract end-to-end: WRONGTYPE, unknown command, wrong arg count,
+  value-not-integer, and syntax-error replies all arrive as `$reply === false`
+  with a non-empty `$client->error()` (keyword-checked, wording-tolerant across
+  engines), plus that `error()` resets to `''` after a subsequent successful
+  command. This covers the `onMessage` error branch and the `error()` getter.
+- This group adds command-surface and error-contract assertion coverage rather
+  than new `Client.php` lines (the new verbs route through the already-covered
+  `queueCommand`→`encode`→`onMessage` path), so the merged number holds at
+  ~**77.9%**. The Redis leg stays at **zero skips**.
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was
