@@ -280,6 +280,7 @@ use Workerman\Timer;
  * @method static bool save($cb = null)
  * @method static bool bgSave($schedule = false, $cb = null)
  * @method static array role($cb = null)
+ * @method static void monitor($cb)
  * @method static bool shutdown($mode = 'SAVE', $cb = null)
  * @method static bool replicaOf($host, $port, $cb = null)
  * @method static bool slaveOf($host, $port, $cb = null)
@@ -401,6 +402,17 @@ class Client
     protected $_subscribe = false;
 
     /**
+     * Set to true while a MONITOR stream is active. Like $_subscribe it locks
+     * the connection — process() stops dispatching queued commands and
+     * onMessage() keeps the MONITOR entry pinned at the head of the queue so
+     * its callback receives every line — but MONITOR has no unsubscribe, so the
+     * only way to stop the stream is to close() the client.
+     *
+     * @var bool
+     */
+    protected $_monitoring = false;
+
+    /**
      * @var bool
      */
     protected $_firstConnect = true;
@@ -437,12 +449,16 @@ class Client
         $this->_options = $options;
         $this->_connectionCallback = $callback;
         $this->connect();
-        $timer = Timer::add(1, function () use (&$timer) {
+        Timer::add(1, function () {
             if (empty($this->_queue)) {
                 return;
             }
-            if ($this->_subscribe) {
-                Timer::del($timer);
+            if ($this->_subscribe || $this->_monitoring) {
+                // A subscribe / monitor stream pins an entry at the head of the
+                // queue indefinitely; skip the timeout scan so it isn't evicted.
+                // Don't delete the timer — when the stream ends (unsubscribe, a
+                // rejected monitor, or a reconnect) it must resume guarding
+                // queued commands again.
                 return;
             }
             reset($this->_queue);
@@ -533,6 +549,7 @@ class Client
 
         $this->_connection->onClose = function () use ($time_start) {
             $this->_subscribe = false;
+            $this->_monitoring = false;
             if ($this->_connectTimeoutTimer) {
                 Timer::del($this->_connectTimeoutTimer);
             }
@@ -561,7 +578,7 @@ class Client
             $queue = current($this->_queue);
             $cb = $queue[2];
             $type = $data[0];
-            if (!$this->_subscribe) {
+            if (!$this->_subscribe && !$this->_monitoring) {
                 unset($this->_queue[key($this->_queue)]);
             }
             if (empty($this->_queue)) {
@@ -624,13 +641,16 @@ class Client
      */
     public function process()
     {
-        if (!$this->_connection || $this->_waiting || empty($this->_queue) || $this->_subscribe) {
+        if (!$this->_connection || $this->_waiting || empty($this->_queue) || $this->_subscribe || $this->_monitoring) {
             return;
         }
         \reset($this->_queue);
         $queue = \current($this->_queue);
         if ($queue[0][0] === 'SUBSCRIBE' || $queue[0][0] === 'PSUBSCRIBE' || $queue[0][0] === 'SSUBSCRIBE') {
             $this->_subscribe = true;
+        }
+        if ($queue[0][0] === 'MONITOR') {
+            $this->_monitoring = true;
         }
         $this->_waiting = true;
         $this->_connection->send($queue[0]);
@@ -962,6 +982,66 @@ class Client
                 \call_user_func($callback, true, $this);
             }
         }
+    }
+
+    /**
+     * MONITOR — stream every command the server processes to $cb.
+     *
+     * Like subscribe(), MONITOR is long-lived and locks the connection: once it
+     * is sent, process() stops dispatching queued commands and onMessage()
+     * keeps this entry pinned at the head of the queue so its callback receives
+     * every monitor line. It uses its own $_monitoring flag rather than
+     * $_subscribe because there is no UNMONITOR — the only way to stop the
+     * stream is to close() the client (which clears the flag).
+     *
+     * The server's initial reply is +OK, delivered here as boolean true by the
+     * onMessage OK-normalisation; that handshake is swallowed. Every subsequent
+     * reply is a raw monitor line passed verbatim to $cb, e.g.
+     *   1700000000.123456 [0 127.0.0.1:6379] "set" "key" "value"
+     *
+     * DANGER: MONITOR streams ALL traffic the server handles and measurably
+     * reduces its throughput — use it for debugging, never as a steady-state
+     * listener, and keep a monitoring client off your hot-path connections.
+     *
+     * If the connection is already running a subscribe or monitor stream the
+     * call is ignored (silently, like connect() when already connected) — you
+     * cannot layer two streaming commands on one connection, and a queued
+     * second MONITOR would otherwise fire when the first stream ends, re-locking
+     * the connection with no way to recover.
+     *
+     * @param  callable $cb function(string $line, Client $client): void
+     * @return void
+     */
+    public function monitor($cb)
+    {
+        if ($this->_monitoring || $this->_subscribe) {
+            return;
+        }
+        $new_cb = function ($result) use ($cb) {
+            if ($result === true) {
+                // The +OK handshake — monitoring has started. Swallow it.
+                return;
+            }
+            if ($result === false) {
+                // MONITOR was rejected (e.g. ACL). The server never entered
+                // monitor mode, so release our lock and drop the pinned entry
+                // so the client stays usable, then surface the failure. The
+                // onMessage() that invoked this closure calls process() right
+                // after it returns, which drains any commands the caller queued
+                // (or had waiting) now that the lock is clear.
+                $this->_monitoring = false;
+                \reset($this->_queue);
+                $headKey = \key($this->_queue);
+                if ($headKey !== null && ($this->_queue[$headKey][0][0] ?? '') === 'MONITOR') {
+                    unset($this->_queue[$headKey]);
+                }
+                \call_user_func($cb, false, $this);
+                return;
+            }
+            \call_user_func($cb, $result, $this);
+        };
+        $this->_queue[] = [['MONITOR'], time(), $new_cb];
+        $this->process();
     }
 
     /**
@@ -1464,6 +1544,7 @@ class Client
             return;
         }
         $this->_subscribe = false;
+        $this->_monitoring = false;
         $this->_connection->onConnect = $this->_connection->onError = $this->_connection->onClose =
         $this->_connection->onMessage = null;
         $this->_connection->close();

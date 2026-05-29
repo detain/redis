@@ -50,6 +50,23 @@ it('no-arg server admin methods exist on Client', function () {
     }
 });
 
+it('monitor is declared with the expected signature', function () {
+    // MONITOR is long-lived and would tear up a shared server's throughput, so
+    // its streaming behaviour is exercised in Feature/MonitorTest rather than
+    // here. Guard the surface so __call() can't silently swallow it.
+    $ref = new ReflectionClass(Client::class);
+    expect($ref->hasMethod('monitor'))->toBeTrue();
+
+    $method = $ref->getMethod('monitor');
+    expect($method->isPublic())->toBeTrue();
+    $params = $method->getParameters();
+    expect($params)->toHaveCount(1);
+    expect($params[0]->getName())->toBe('cb');
+    // $cb is required — a future default would mean monitor() with no callback
+    // silently locks the connection and discards the stream.
+    expect($params[0]->isOptional())->toBeFalse();
+});
+
 it('unsubscribe family methods exist on Client', function () {
     // These bypass the subscribe-lock by writing straight to the socket, so
     // their behaviour is exercised live in Feature/UnsubscribeTest. Here we

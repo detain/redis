@@ -190,6 +190,26 @@ subscribe callback if you need it. `pUnsubscribe()` mirrors it for
 channels. Calling them when not subscribed is a no-op that still invokes the
 callback. To stop listening entirely you can also just `close()` the client.
 
+## Monitor
+
+`monitor()` streams every command the server processes to your callback — the
+debugging counterpart to `redis-cli MONITOR`. Like `subscribe()` it locks the
+connection (its own internal flag); there is no "unmonitor", so you stop it by
+`close()`ing the client. The opening `+OK` handshake is swallowed; each later
+call is one raw monitor line.
+
+```php
+$debug = new Client('redis://127.0.0.1:6379');
+$debug->monitor(function ($line) {
+    // e.g. 1700000000.123456 [0 127.0.0.1:6379] "set" "key" "value"
+    error_log($line);
+});
+```
+
+> **Heads up:** MONITOR mirrors *all* traffic the server handles and measurably
+> lowers its throughput. Use a dedicated client for it and never leave one
+> running on a hot path.
+
 ## Server commands
 
 Explicit wrappers for the no-arg health and admin commands: `ping()`, `info()`, `dbSize()`, `time()`, `flushDb()`, `flushAll()`. These bypass `__call()`'s trailing-callback handling (which only triggers when more than one argument is passed), so the closure goes through `queueCommand()` instead of being shipped to Redis as a bogus command arg.
