@@ -271,6 +271,20 @@ iterator helper that supports both callback and Revolt coroutine modes:
   coverage floor ratcheted to **70**. (The Revolt coroutine-mode branches of
   `*ScanAll`/`suspenstion()` remain for the Revolt group.)
 
+#### Connection / lifecycle coverage — Feature tests
+
+- Added `tests/Feature/ConnectionLifecycleTest.php` (7 cases) covering connection
+  verbs not exercised elsewhere: `auth` no-password error path, `auth` not
+  poisoning `_auth` after a rejected credential, `select` to a valid DB (tracks
+  `_db`) and to an out-of-range index (error reply, no state advance),
+  `closeConnection()` / `close()` teardown (connection nulled, queue emptied),
+  and a `hello(2, …)` handshake that pins the reply map (`server`/`proto`/`role`/
+  `version`) rather than just asserting array shape. The `auth` cases gate on the
+  **observed reply** (skip when the server accepts AUTH with no password set, as
+  Dragonfly does) so the file is correct under any invocation. Added a `skipTest()`
+  free helper in `tests/Pest.php` for behaviour-gated (non-backend-name) skips.
+  `Client.php` merged **68.5% → 70.4%**; total merged **71.3% → 73.0%**.
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was

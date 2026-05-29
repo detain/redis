@@ -71,6 +71,22 @@ function skipOnBackend(string $backend, string $reason): void
     }
 }
 
+/**
+ * Skip the current test unconditionally with a reason.
+ *
+ * For divergences gated on OBSERVED runtime behaviour rather than the backend
+ * name (e.g. "skip if the server accepted AUTH with no password set") — the
+ * caller decides when to invoke it. Same PHPStan-clean exception mechanism as
+ * skipOnBackend() (test()->markTestSkipped() trips method.notFound on Pest's
+ * TestCall union, and the project forbids @var $this in closures).
+ *
+ * @param string $reason Why this case is being skipped; surfaced in output.
+ */
+function skipTest(string $reason): void
+{
+    throw new \PHPUnit\Framework\SkippedWithMessageException($reason);
+}
+
 /*
 |--------------------------------------------------------------------------
 | runInWorker helper
