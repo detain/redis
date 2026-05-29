@@ -324,6 +324,21 @@ iterator helper that supports both callback and Revolt coroutine modes:
   engines, and the **Redis leg has zero skips** (was 5).
   `Client.php` merged **72.95% → 75.26%**; total merged **75.34% → 77.45%**.
 
+#### Pub/Sub delivery coverage — Feature tests
+
+- Added `tests/Feature/PubSubDeliveryTest.php` (8 cases) for the plain pub/sub
+  delivery paths not previously covered (the existing tests covered the *sharded*
+  family, unsubscribe lock-clearing, and monitor): `subscribe`→`publish` message
+  delivery (channel + payload pinned), `pSubscribe` pattern delivery (pattern +
+  channel + payload), `publish` receiver count (`0` with no subscriber, `≥1`
+  with one), `pubSub('NUMSUB', …)` and `pubSub('NUMPAT')` introspection,
+  multi-channel `subscribe([...])` delivery, and a negative test proving a message
+  is NOT delivered after `unsubscribe`. Every streaming test is bounded — the 2nd
+  client publishes from a `Timer` only after the subscribe ack, the message
+  callback `$emit`s once, and a non-recurring `Timer` `$fail`s before the harness
+  timeout — verified flake-free across 5 consecutive runs per engine.
+  `Client.php` merged **75.26% → 75.79%**; total merged **77.45% → 77.93%**.
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was
