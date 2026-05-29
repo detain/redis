@@ -158,6 +158,38 @@ $redis->rawCommand('CONFIG', 'GET', 'maxmemory', function ($reply) {
 
 Calling `rawCommand()` with no args (or only a callback) throws `InvalidArgumentException` rather than sending an empty command.
 
+## Pub/Sub
+
+`subscribe()` / `pSubscribe()` / `sSubscribe()` put the connection into
+subscribe mode and stream messages to your callback. Once subscribed, the
+connection is *locked* — Redis only allows (un)subscribe commands on it — so
+the matching `unsubscribe()` / `pUnsubscribe()` / `sUnsubscribe()` methods are
+how you hand it back for ordinary commands. They write the teardown frame
+straight to the socket (bypassing the lock), and the connection resumes normal
+work as soon as the server confirms zero remaining subscriptions.
+
+```php
+$redis->subscribe(['news', 'sport'], function ($channel, $message) {
+    // fires for every published message
+});
+
+// Later — e.g. from a Timer — drop the subscription and resume normal use.
+$redis->unsubscribe();                      // omit args to drop every channel
+$redis->get('some:key', function ($value) {
+    // runs now that the connection is no longer locked
+});
+```
+
+`unsubscribe()` takes an optional list of channels (omit to drop them all) and
+an optional trailing callback that fires with `(true, $client)` once the
+connection has fully left subscribe mode. That callback means "back to normal
+command mode" — on a partial unsubscribe (dropping some of several channels) it
+is held until the last channel goes too, so track per-channel state in your
+subscribe callback if you need it. `pUnsubscribe()` mirrors it for
+`pSubscribe()` patterns, and `sUnsubscribe()` for `sSubscribe()` shard
+channels. Calling them when not subscribed is a no-op that still invokes the
+callback. To stop listening entirely you can also just `close()` the client.
+
 ## Server commands
 
 Explicit wrappers for the no-arg health and admin commands: `ping()`, `info()`, `dbSize()`, `time()`, `flushDb()`, `flushAll()`. These bypass `__call()`'s trailing-callback handling (which only triggers when more than one argument is passed), so the closure goes through `queueCommand()` instead of being shipped to Redis as a bogus command arg.

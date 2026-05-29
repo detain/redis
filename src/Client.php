@@ -256,13 +256,9 @@ use Workerman\Timer;
  * @method static int sPublish($channel, $message, $cb = null)
  * @method static mixed pubSub($keyword, $argument = null, $cb = null)
  * @method static void sSubscribe($channels, $cb)
- * TODO: UNSUBSCRIBE / PUNSUBSCRIBE / SUNSUBSCRIBE need a subscribe-lock bypass
- * (the _subscribe = true flag set by process() prevents new commands from
- * being sent on a subscribed connection). Sent through __call() they never
- * reach the wire. A follow-up commit should add explicit methods that write
- * the unsubscribe frame directly via $this->_connection->send() and reset
- * $this->_subscribe in the response handler. Until then, users that need
- * teardown can pair a dedicated subscriber Client with close().
+ * @method static void unsubscribe(...$channelsAndCb)
+ * @method static void pUnsubscribe(...$patternsAndCb)
+ * @method static void sUnsubscribe(...$channelsAndCb)
  * Connection / server methods
  * @method static string|bool ping($cb = null)
  * @method static string|bool quit($cb = null)
@@ -416,6 +412,15 @@ class Client
      * @var bool
      */
     protected $_quitting = false;
+
+    /**
+     * Callbacks registered by unsubscribe() / pUnsubscribe() / sUnsubscribe(),
+     * fired with (true, $client) once the connection has fully left subscribe
+     * mode (the server reports zero remaining subscriptions).
+     *
+     * @var array
+     */
+    protected $_unsubscribeCallbacks = [];
 
     /**
      * Client constructor.
@@ -721,6 +726,13 @@ class Client
                 case 'message':
                     \call_user_func($cb, $result[1], $result[2], $this);
                     return;
+                case 'unsubscribe':
+                case 'punsubscribe':
+                case 'sunsubscribe':
+                    // Any unsubscribe-family ack clears the lock — see
+                    // handleUnsubscribeAck() for why all three types are accepted.
+                    $this->handleUnsubscribeAck($result);
+                    return;
                 default:
                     echo 'unknow response type for subscribe. buffer:' . serialize($result) . "\n";
             }
@@ -749,6 +761,13 @@ class Client
                 case 'pmessage':
                     \call_user_func($cb, $result[1], $result[2], $result[3], $this);
                     return;
+                case 'unsubscribe':
+                case 'punsubscribe':
+                case 'sunsubscribe':
+                    // Any unsubscribe-family ack clears the lock — see
+                    // handleUnsubscribeAck() for why all three types are accepted.
+                    $this->handleUnsubscribeAck($result);
+                    return;
                 default:
                     echo 'unknow response type for psubscribe. buffer:' . serialize($result) . "\n";
             }
@@ -762,8 +781,8 @@ class Client
      * channels. Mirrors subscribe() but uses SSUBSCRIBE / smessage instead of
      * SUBSCRIBE / message. The SSUBSCRIBE command flips $this->_subscribe via
      * process(), so the connection enters subscribe-mode just like the regular
-     * subscribe() and the same teardown caveats apply (see the TODO comment
-     * near the @method declarations for UNSUBSCRIBE / SUNSUBSCRIBE).
+     * subscribe(). Call sUnsubscribe() to drop the shard subscription and hand
+     * the connection back for ordinary commands (or close() the client).
      *
      * @param string|array $channels Single channel name or list of channel names.
      * @param callable     $cb       function(string $channel, string $message, Client $client): void
@@ -782,12 +801,167 @@ class Client
                 case 'smessage':
                     \call_user_func($cb, $result[1], $result[2], $this);
                     return;
+                case 'unsubscribe':
+                case 'punsubscribe':
+                case 'sunsubscribe':
+                    // Any unsubscribe-family ack clears the lock — see
+                    // handleUnsubscribeAck() for why all three types are accepted.
+                    $this->handleUnsubscribeAck($result);
+                    return;
                 default:
                     echo 'unknow response type for ssubscribe. buffer:' . serialize($result) . "\n";
             }
         };
         $this->_queue[] = [['SSUBSCRIBE', $channels], time(), $new_cb];
         $this->process();
+    }
+
+    /**
+     * UNSUBSCRIBE — stop listening on zero or more channels.
+     *
+     * Pass no channels to drop every active subscription; pass specific
+     * channel names to drop only those. An optional trailing callable fires
+     * with (true, $client) once the connection has fully left subscribe mode
+     * (zero remaining subscriptions). The callback signals "back to normal
+     * command mode", not the teardown of a specific channel: on a partial
+     * unsubscribe — dropping some of several channels — it is held until the
+     * connection eventually leaves subscribe mode entirely. Callers that need
+     * per-channel notification should track that in their subscribe callback.
+     *
+     * subscribe() locks the connection (process() refuses to send anything
+     * while $this->_subscribe is true), so an unsubscribe routed through
+     * __call() would sit in the queue forever. This method writes the frame
+     * straight to the socket, bypassing that lock; handleUnsubscribeAck()
+     * clears the lock when the server reports zero remaining subscriptions.
+     *
+     * @param  mixed ...$channelsAndCb channel names, optional trailing callable.
+     * @return null
+     */
+    public function unsubscribe(...$channelsAndCb)
+    {
+        return $this->writeUnsubscribe('UNSUBSCRIBE', $channelsAndCb);
+    }
+
+    /**
+     * PUNSUBSCRIBE — stop listening on zero or more patterns.
+     *
+     * Mirror of unsubscribe() for pSubscribe() pattern subscriptions. Pass no
+     * patterns to drop them all; an optional trailing callable fires with
+     * (true, $client) once the connection has fully left subscribe mode.
+     *
+     * @param  mixed ...$patternsAndCb pattern strings, optional trailing callable.
+     * @return null
+     */
+    public function pUnsubscribe(...$patternsAndCb)
+    {
+        return $this->writeUnsubscribe('PUNSUBSCRIBE', $patternsAndCb);
+    }
+
+    /**
+     * SUNSUBSCRIBE — stop listening on zero or more shard channels.
+     *
+     * Mirror of unsubscribe() for sSubscribe() shard subscriptions. Pass no
+     * channels to drop them all; an optional trailing callable fires with
+     * (true, $client) once the connection has fully left subscribe mode.
+     *
+     * @param  mixed ...$channelsAndCb shard channel names, optional trailing callable.
+     * @return null
+     */
+    public function sUnsubscribe(...$channelsAndCb)
+    {
+        return $this->writeUnsubscribe('SUNSUBSCRIBE', $channelsAndCb);
+    }
+
+    /**
+     * Write an UNSUBSCRIBE-family frame directly to the connection, bypassing
+     * the queue/process() lock that subscribe() puts in place.
+     *
+     * A trailing callable in $args is popped and registered to fire once the
+     * connection has fully unsubscribed (see handleUnsubscribeAck()). If the
+     * client is not currently in subscribe mode there is nothing to tear down
+     * — and a bare UNSUBSCRIBE would produce a reply onMessage() couldn't match
+     * to any queued command — so we honour the callback contract and return
+     * without touching the wire.
+     *
+     * @param  string $verb 'UNSUBSCRIBE' | 'PUNSUBSCRIBE' | 'SUNSUBSCRIBE'.
+     * @param  array  $args channel/pattern names, optional trailing callable.
+     * @return null
+     */
+    protected function writeUnsubscribe($verb, array $args)
+    {
+        $cb = null;
+        if (!empty($args) && \is_callable(\end($args))) {
+            $cb = \array_pop($args);
+        }
+        // A live connection is implied here: closeConnection() clears the
+        // _subscribe flag and the socket together, so being in subscribe mode
+        // guarantees _connection is set.
+        if (!$this->_subscribe) {
+            if ($cb !== null) {
+                \call_user_func($cb, true, $this);
+            }
+            return null;
+        }
+        if ($cb !== null) {
+            $this->_unsubscribeCallbacks[] = $cb;
+        }
+        $this->_connection->send(\array_merge([$verb], $args));
+        return null;
+    }
+
+    /**
+     * Handle an UNSUBSCRIBE / PUNSUBSCRIBE / SUNSUBSCRIBE acknowledgement frame.
+     *
+     * All three subscribe callbacks route every unsubscribe-family ack type
+     * here, not just their matching one: a SUNSUBSCRIBE issued with no channel
+     * argument is acked by Dragonfly as type 'unsubscribe' (not 'sunsubscribe'),
+     * so keying off a single type would miss the unsubscribe-all teardown and
+     * leave the connection locked forever.
+     *
+     * Redis sends one ack per channel, each carrying the running count of
+     * remaining subscriptions ($result[2]). While that count is non-zero the
+     * connection is still subscribed and we leave the lock in place. When it
+     * reaches zero the connection has left subscribe mode, so we:
+     *   - clear $this->_subscribe so process() can resume sending,
+     *   - drop the now-stale SUBSCRIBE entry that has been pinned at the head
+     *     of the queue (onMessage() never removes it while subscribed; without
+     *     this the next process() would re-send SUBSCRIBE), and
+     *   - fire any callbacks registered by the unsubscribe* methods.
+     *
+     * onMessage() calls process() immediately after this returns, which drains
+     * whatever the caller queued while the connection was locked.
+     *
+     * @param  array $result [verb, channel|null, remaining_count].
+     * @return void
+     */
+    protected function handleUnsubscribeAck($result)
+    {
+        // Default the count to 0 (trigger teardown) when the element is absent:
+        // the safe failure mode on a malformed ack is to unlock rather than
+        // stay locked forever.
+        $remaining = isset($result[2]) ? (int)$result[2] : 0;
+        if ($remaining > 0) {
+            // Still subscribed to other channels — keep the lock and hold any
+            // registered completion callbacks until the connection is fully
+            // unsubscribed (see writeUnsubscribe()).
+            return;
+        }
+        $this->_subscribe = false;
+        \reset($this->_queue);
+        $headKey = \key($this->_queue);
+        if ($headKey !== null) {
+            $verb = $this->_queue[$headKey][0][0] ?? '';
+            if ($verb === 'SUBSCRIBE' || $verb === 'PSUBSCRIBE' || $verb === 'SSUBSCRIBE') {
+                unset($this->_queue[$headKey]);
+            }
+        }
+        if (!empty($this->_unsubscribeCallbacks)) {
+            $callbacks = $this->_unsubscribeCallbacks;
+            $this->_unsubscribeCallbacks = [];
+            foreach ($callbacks as $callback) {
+                \call_user_func($callback, true, $this);
+            }
+        }
     }
 
     /**

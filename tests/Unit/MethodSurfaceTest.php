@@ -49,3 +49,15 @@ it('no-arg server admin methods exist on Client', function () {
         expect($ref->hasMethod($name))->toBeTrue();
     }
 });
+
+it('unsubscribe family methods exist on Client', function () {
+    // These bypass the subscribe-lock by writing straight to the socket, so
+    // their behaviour is exercised live in Feature/UnsubscribeTest. Here we
+    // just guard that the explicit declarations stay in place — __call() can't
+    // reach them (the SUBSCRIBE lock would swallow a queued unsubscribe).
+    $ref = new ReflectionClass(Client::class);
+    foreach (['unsubscribe', 'pUnsubscribe', 'sUnsubscribe'] as $name) {
+        expect($ref->hasMethod($name))->toBeTrue();
+        expect($ref->getMethod($name)->isPublic())->toBeTrue();
+    }
+});
