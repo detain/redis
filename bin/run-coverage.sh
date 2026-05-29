@@ -16,10 +16,11 @@ COVDIR="$ROOT/build/coverage"
 
 # Coverage floor (Step 0.4). The merge script fails non-zero if the MERGED total
 # line coverage drops below this. Ratcheted up as each group lands more tests:
-# Group 0 baseline 68.62% (floor 65), Group 1 (Protocols/Redis -> 100%) 69.48%
-# (floor 69). RATCHET this toward 95 as later groups land (Group 9 sets the
-# final achieved number). Override at the call site with COVERAGE_MIN=<pct>.
-COVERAGE_MIN="${COVERAGE_MIN:-65}"
+# Group 0 baseline 68.62%, Group 1 (Protocols/Redis -> 100%) 69.48%, Group 2
+# (Client pure-logic units) 71.31% -> floor 70 (a couple points of headroom for
+# minor subprocess-dump nondeterminism). RATCHET toward 95 as later groups land
+# (Group 9 sets the final achieved number). Override with COVERAGE_MIN=<pct>.
+COVERAGE_MIN="${COVERAGE_MIN:-70}"
 
 # 1. fresh coverage dir
 rm -rf "$COVDIR"

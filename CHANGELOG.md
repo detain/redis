@@ -252,6 +252,25 @@ iterator helper that supports both callback and Revolt coroutine modes:
   server-free (no backend required). Total merged line coverage rose to **69.48%**
   and the coverage floor was ratcheted to **69**.
 
+#### Client pure-logic coverage — in-process unit tests
+
+- Added 34 in-process unit tests (`tests/Unit/ClientCommandShapingTest.php`,
+  `ClientScanAllTest.php`, `ClientUnsubscribeAckTest.php`) that drive
+  `src/Client.php`'s pure command-shaping and aggregation logic **without the
+  Workerman event loop or a live server** — using
+  `ReflectionClass::newInstanceWithoutConstructor()` so commands queue (rather
+  than send) and the queued wire arrays can be asserted. Covers: `__call`
+  trailing-callable popping (incl. the lone-callable footgun and the
+  `randomKey/multi/exec/discard` exception list), `dispatcher` dot-glue vs
+  space-split, `rawCommand` verbatim + empty-args `\InvalidArgumentException`,
+  `select`/`auth` argument shaping, `error()`, the `scanAll`/`hScanAll`/`sScanAll`/
+  `zScanAll` callback-mode aggregation (cursor termination, multi-page
+  accumulation, LIMIT cap, error abort, MATCH/COUNT/TYPE forwarding, set dedup,
+  zScanAll score-string precision), and `handleUnsubscribeAck` lock bookkeeping.
+  `Client.php` merged coverage **66.5% → 68.5%**; total merged **69.5% → 71.3%**;
+  coverage floor ratcheted to **70**. (The Revolt coroutine-mode branches of
+  `*ScanAll`/`suspenstion()` remain for the Revolt group.)
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was
