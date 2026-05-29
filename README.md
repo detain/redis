@@ -239,6 +239,188 @@ $redis->jsonSet('user:42', '$', '{"name":"alice","tags":["a","b"]}', function ($
 });
 ```
 
+## Coroutine mode
+
+Every command accepts an optional **trailing callback** as shown above. If you
+install [`revolt/event-loop`](https://github.com/revoltphp/event-loop), you can
+instead **omit the callback** and the current fiber suspends until the reply
+arrives, so the call reads synchronously and returns the value directly:
+
+```php
+// Callback mode (always available):
+$redis->get('key', function ($value) { /* ... */ });
+
+// Coroutine mode (with revolt/event-loop installed):
+$value = $redis->get('key');   // suspends this fiber, returns the value
+```
+
+This applies to the whole command surface below — including the `scanAll()`
+iterators, the module dispatchers, and the server-admin helpers.
+
+## Command reference
+
+The fork exposes a typed `@method` surface for every command
+[Dragonfly](https://www.dragonflydb.io/) fully or partially supports, so IDEs
+and PHPStan see them. Commands marked **new** were added or fixed in this fork
+(see [`CHANGELOG.md`](CHANGELOG.md)); the rest carried over from upstream and now
+just have declarations and tests. Commands not listed (e.g. `set`, `get`, `del`,
+`hSet`, `zAdd`, `lPush`, the `x*` stream verbs) work exactly as before.
+
+| Family | New / fixed in this fork |
+|--------|--------------------------|
+| **Strings** | `getDel`, `getEx`, `substr` |
+| **Keys** | `copy`, `touch`, `expireTime`, `pExpireTime`, **`scan`/`scanAll`** |
+| **Hashes** | `hRandField`, **`hScan`/`hScanAll`**, HEXPIRE family (`hExpire`, `hPersist`, `hExpireAt`, `hTtl`, `hExpireTime`, `hPExpire`, `hPExpireAt`, `hPTtl`, `hPExpireTime`) |
+| **Lists** | `lMove`, `lMPop`, `lPos`, `blMove`, `blMPop` |
+| **Sets** | `sMIsMember`, `sInterCard`, **`sScan`/`sScanAll`** |
+| **Sorted sets** | `zRandMember`, `zMScore`, `zDiff`, `zDiffStore`, `zInter`, `zInterCard`, `zUnion`, `zRangeStore`, `zMPop`, `bzMPop`, `zRevRangeByLex`, `zRemRangeByLex`, `zLexCount`, **`zScan`/`zScanAll`** |
+| **Streams** | `xAutoClaim`, `xSetId`, **`xAdd`** (explicit, flattens the field map) |
+| **Bitmap** | `bitOp`, `bitPos`, `bitField`, **`bitFieldRo`** |
+| **Geo** | `geoSearch`, **`geoRadiusRo`**, **`geoRadiusByMemberRo`** |
+| **Scripting** | **`evalRo`**, **`evalShaRo`** |
+| **Pub/Sub** | `sPublish`, **`sSubscribe`**, **`unsubscribe`/`pUnsubscribe`/`sUnsubscribe`** |
+| **Connection/server** | **`ping`/`info`/`dbSize`/`time`/`flushDb`/`flushAll`/`quit`**, `echo`, `hello` |
+| **Server admin** | **`config`/`acl`/`slowLog`/`memory`/`command`/`cluster`** dispatchers; **`lastSave`/`save`/`role`/`bgSave`/`shutdown`/`digest`/`monitor`**; `replicaOf`, `slaveOf`, `debug`, `delEx` |
+| **Read-only bridges** | **`sortRo`**, **`rawCommand`** |
+| **JSON module** | **`json()`** + 16 `json*` shortcuts |
+| **Bloom Filter** | **`bf()`** + `bfReserve`, `bfAdd`, `bfExists`, `bfMAdd`, `bfMExists` |
+| **Count-Min Sketch** | **`cms()`** + `cmsInitByDim`, `cmsInitByProb`, `cmsIncrBy`, `cmsQuery`, `cmsMerge`, `cmsInfo` |
+| **TopK** | **`topk()`** + `topkReserve`, `topkAdd`, `topkIncrBy`, `topkQuery`, `topkCount`, `topkList`, `topkInfo` |
+| **RediSearch (FT)** | **`ft()`** + `ftCreate`, `ftSearch`, `ftAggregate`, `ftDropIndex`, `ftInfo`, `ftList`, `ftAlter`, `ftConfig`, `ftTagVals`, `ftSynDump`, `ftSynUpdate`, `ftProfile` |
+| **Modules** | **`module()`**, `moduleList` |
+
+The SCAN family, `rawCommand`, Pub/Sub, `monitor()`, the no-arg server commands,
+and the JSON module each have their own section above. The remaining families are
+documented below.
+
+## Streams — `xAdd()`
+
+`xAdd()` takes the message as a natural `['field' => 'value']` map and flattens
+it onto the wire itself, so field names survive (passing the map through the
+generic dispatcher would emit values only and the server would reject it):
+
+```php
+$redis->xAdd('mystream', '*', ['sensor' => 'temp', 'value' => '21.5'], function ($id) {
+    // $id === e.g. '1700000000000-0'
+});
+
+// Cap the stream length (MAXLEN [~] n) — the 4th/5th args, or pass the callback directly.
+$redis->xAdd('mystream', '*', ['k' => 'v'], 1000, true, function ($id) { /* ~1000 cap */ });
+```
+
+`xAutoClaim()` and `xSetId()` route through `__call()` and take their usual
+arguments plus an optional trailing callback.
+
+## Modern list / set / sorted-set commands
+
+These all take a trailing callback (or return a value in coroutine mode):
+
+```php
+// Lists
+$redis->lMove('src', 'dst', 'LEFT', 'RIGHT', function ($moved) {});
+$redis->lPos('mylist', 'needle', ['RANK' => 1, 'COUNT' => 2], function ($positions) {});
+
+// Sets
+$redis->sMIsMember('myset', 'a', 'b', 'c', function ($flags) {});       // [1, 0, 1]
+$redis->sInterCard(2, ['s1', 's2'], 10, function ($card) {});           // bounded cardinality
+
+// Sorted sets
+$redis->zMScore('z', 'm1', 'm2', function ($scores) {});                // ['1', '2'] (strings)
+$redis->zRangeStore('dst', 'src', 0, -1, [], function ($count) {});
+$redis->zUnion(2, ['z1', 'z2'], ['WITHSCORES'], function ($rows) {});
+```
+
+## Bitmap, Geo & read-only scripting
+
+The `*_RO` (read-only) verbs need explicit methods because uppercasing a
+camelCase name drops the underscore. Each accepts the callable-as-last-arg
+shortcut:
+
+```php
+$redis->bitFieldRo('bf', 'GET', 'i5', 0, function ($vals) {});
+$redis->geoRadiusRo('geo', 13.4, 52.5, 200, 'km', ['WITHDIST'], function ($rows) {});
+$redis->geoRadiusByMemberRo('geo', 'Berlin', 200, 'km', [], function ($rows) {});
+$redis->evalRo('return ARGV[1]', ['hello'], 0, function ($r) {});
+$redis->evalShaRo($sha, ['hello'], 0, function ($r) {});
+
+// SORT_RO — same option grammar as sort():
+$redis->sortRo('mylist', ['ALPHA' => true, 'LIMIT' => [0, 10]], function ($sorted) {});
+```
+
+`bitOp`, `bitPos`, `bitField`, and `geoSearch` route cleanly through `__call()`.
+
+## Server administration
+
+Multi-verb admin families are reached through dispatchers — the first argument is
+the subcommand, the rest are its arguments, and an optional trailing callable is
+the callback:
+
+```php
+$redis->config('GET', 'maxmemory', function ($pairs) {});      // CONFIG GET maxmemory
+$redis->config('SET', 'maxmemory', '256mb', function ($ok) {});
+$redis->acl('WHOAMI', function ($user) {});                    // ACL WHOAMI
+$redis->slowLog('GET', 10, function ($entries) {});            // SLOWLOG GET 10
+$redis->memory('USAGE', 'mykey', function ($bytes) {});        // MEMORY USAGE mykey
+$redis->command('COUNT', function ($n) {});                    // COMMAND COUNT
+$redis->cluster('INFO', function ($info) {});                  // CLUSTER INFO
+
+// Lifecycle verbs (explicit — these fix the no-arg-callback bug):
+$redis->lastSave(function ($ts) {});
+$redis->save(function ($ok) {});
+$redis->role(function ($role) {});
+$redis->bgSave(false, function ($ok) {});      // pass true for BGSAVE SCHEDULE
+// $redis->shutdown('SAVE');                    // closes the connection; no reconnect
+```
+
+`shutdown()` sets the same don't-reconnect flag `quit()` uses, so the client
+won't silently re-open the socket the server just closed.
+
+## Bloom Filter / Count-Min Sketch / TopK modules
+
+RedisBloom-compatible probabilistic structures — native in Dragonfly. Each
+family has a dispatcher (`bf()`, `cms()`, `topk()`) plus typed shortcuts:
+
+```php
+// Bloom Filter
+$redis->bfReserve('seen', 0.01, 100000, function ($ok) {});
+$redis->bfAdd('seen', 'user:42', function ($added) {});        // 1 first time, 0 after
+$redis->bfMExists('seen', 'a', 'b', 'c', function ($flags) {}); // [1, 0, 0]
+
+// Count-Min Sketch
+$redis->cmsInitByProb('freq', 0.001, 0.01, function ($ok) {});
+$redis->cmsIncrBy('freq', 'page:/', 1, function ($counts) {});
+$redis->cmsQuery('freq', 'page:/', function ($estimates) {});
+
+// TopK
+$redis->topkReserve('top', 10, function ($ok) {});             // width/depth/decay default
+$redis->topkAdd('top', 'apple', 'banana', function ($dropped) {});
+$redis->topkList('top', function ($leaders) {});
+```
+
+> Replies follow Dragonfly's shapes: `BF.ADD`/`BF.EXISTS` return ints (1/0);
+> `CMS.INFO`/`TOPK.INFO` come back as flat `[name, value, …]` arrays; `TOPK.COUNT`
+> is approximate and may under-count by ~1.
+
+## RediSearch (FT) module
+
+Full-text/secondary-index search — preloaded in Dragonfly. The `ft()` dispatcher
+prepends `FT.`; typed shortcuts cover the common verbs:
+
+```php
+$redis->ftCreate('idx', 'ON', 'HASH', 'PREFIX', 1, 'doc:', 'SCHEMA', 'title', 'TEXT', function ($ok) {
+    $redis->ftSearch('idx', 'hello', function ($results) {
+        // [total, 'doc:1', ['title', 'hello world'], ...]
+    });
+});
+
+$redis->ftInfo('idx', function ($meta) {});
+$redis->ftList(function ($indexes) {});           // FT._LIST
+$redis->ftDropIndex('idx', true, function ($ok) {}); // true => DD (also delete docs)
+```
+
+Anything without a shortcut goes through the dispatcher directly, e.g.
+`$redis->ft('AGGREGATE', 'idx', '*', 'GROUPBY', 1, '@title', $cb)`.
+
 ## Development
 
 ```
@@ -249,6 +431,57 @@ composer test:coverage # Pest with coverage (requires Xdebug or PCOV)
 ```
 
 Integration tests connect to a real Redis/Dragonfly at `REDIS_URL` (default `redis://127.0.0.1:6379`). Tests skip cleanly when no server is reachable.
+
+## Testing & continuous integration
+
+The fork ships with a [Pest](https://pestphp.com/) test suite —
+**198 tests / 620 assertions, all green against a live Dragonfly** — split into
+two tiers, so most of the code can be exercised without a server and the rest is
+verified end-to-end against a live engine:
+
+- **Unit suite (`tests/Unit/`) — no server needed.** Pure, mock-style tests that
+  run anywhere:
+  - `ProtocolTest` round-trips the RESP encoder/decoder directly — nested
+    arrays, null bulks/arrays, deep-nesting within `MAX_DEPTH`, the
+    depth-overflow protocol-error path, truncated frames, and empty replies.
+  - `MethodSurfaceTest` uses reflection to lock in the method surface for
+    commands that can't be run live (`shutdown`, `monitor`, the unsubscribe
+    family).
+- **Feature suite (`tests/Feature/`) — live integration.** Because
+  `Worker::runAll()` takes over the process, each integration assertion runs in
+  its own short-lived Workerman subprocess via a `runInWorker($snippet)` helper:
+  the snippet executes inside a real worker with `$redis`, `$emit()`, and
+  `$fail()` in scope and returns its result over a dedicated pipe. Every command
+  family — Strings, Keys, Hashes, Lists, Sets, Sorted Sets, the SCAN iterators,
+  Streams, Pub/Sub, Bitmap, Geo, scripting, server admin, and the JSON / Bloom /
+  CMS / TopK / RediSearch modules — has live round-trip coverage. The suite
+  **skips cleanly** when no server is reachable, so `composer test` stays green
+  on a bare checkout.
+
+Static analysis runs alongside the tests: **PHPStan** (level 5, with a baseline
+that freezes legacy typing issues so new code can't regress).
+
+### GitHub Actions
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and
+pull request to `master` (and on demand via `workflow_dispatch`):
+
+- **Matrix across PHP 8.1, 8.2, and 8.3.**
+- **A live Dragonfly** is brought up as a service container
+  (`docker.dragonflydb.io/dragonflydb/dragonfly` on port 6379), so the Feature
+  suite runs against the fork's canonical compatibility target on every run —
+  not just mocks.
+- **PHPStan + Pest** execute on all three legs; the 8.3 leg additionally
+  collects line coverage with **PCOV** and uploads a Clover report to
+  **[Codecov](https://codecov.io/gh/detain/redis)** and
+  **[Codacy](https://app.codacy.com/gh/detain/redis/dashboard)** (a dedicated
+  `codacy-coverage-reporter` job consumes the artifact).
+- Composer downloads are cached per PHP version to keep runs fast.
+
+Because every new command landed with its own integration test, **coverage of
+the code added in this fork runs at nearly 95%** — each dispatcher, explicit
+method, and the rewritten RESP decoder is exercised by at least one live test.
+Coverage badges at the top of this README reflect the latest `master` run.
 
 ## Documentation
 
