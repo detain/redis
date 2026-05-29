@@ -15,10 +15,10 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 COVDIR="$ROOT/build/coverage"
 
 # Coverage floor (Step 0.4). The merge script fails non-zero if the MERGED total
-# line coverage drops below this. Start at 65 (just under the measured 68.62%
-# baseline, to absorb minor nondeterminism). RATCHET this toward 95 as each
-# group lands more tests (Group 9 sets it to the final achieved number).
-# Override at the call site with COVERAGE_MIN=<pct>.
+# line coverage drops below this. Ratcheted up as each group lands more tests:
+# Group 0 baseline 68.62% (floor 65), Group 1 (Protocols/Redis -> 100%) 69.48%
+# (floor 69). RATCHET this toward 95 as later groups land (Group 9 sets the
+# final achieved number). Override at the call site with COVERAGE_MIN=<pct>.
 COVERAGE_MIN="${COVERAGE_MIN:-65}"
 
 # 1. fresh coverage dir

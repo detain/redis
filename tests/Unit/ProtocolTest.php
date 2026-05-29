@@ -2,6 +2,27 @@
 
 use Workerman\Redis\Protocols\Redis;
 
+/**
+ * A minimal ConnectionInterface stub so Redis::input() (which only needs the
+ * type hint, never actually touches the connection) can be exercised in-process.
+ * Returned as a fresh instance per call to avoid cross-test state.
+ */
+function protocolStubConnection(): \Workerman\Connection\ConnectionInterface
+{
+    return new class extends \Workerman\Connection\ConnectionInterface {
+        public function send(mixed $sendBuffer, bool $raw = false): bool|null { return null; }
+        public function getRemoteIp(): string { return ''; }
+        public function getRemotePort(): int { return 0; }
+        public function getRemoteAddress(): string { return ''; }
+        public function getLocalIp(): string { return ''; }
+        public function getLocalPort(): int { return 0; }
+        public function getLocalAddress(): string { return ''; }
+        public function isIpV4(): bool { return true; }
+        public function isIpV6(): bool { return false; }
+        public function close(mixed $data = null, bool $raw = false): void {}
+    };
+}
+
 it('encodes a simple flat command into RESP', function () {
     $wire = Redis::encode(['PING']);
     expect($wire)->toBe("*1\r\n\$4\r\nPING\r\n");
@@ -133,23 +154,180 @@ it('input returns 0 for a truncated nested-array frame', function () {
     // (the second element of the inner array is incomplete).
     $truncated = "*2\r\n\$1\r\n0\r\n*2\r\n\$3\r\nfoo\r\n\$3\r\nb";
 
-    // input() requires a ConnectionInterface — extend the abstract class with
-    // stub implementations of all abstract methods.
-    $connection = new class extends \Workerman\Connection\ConnectionInterface {
-        public function send(mixed $sendBuffer, bool $raw = false): bool|null { return null; }
-        public function getRemoteIp(): string { return ''; }
-        public function getRemotePort(): int { return 0; }
-        public function getRemoteAddress(): string { return ''; }
-        public function getLocalIp(): string { return ''; }
-        public function getLocalPort(): int { return 0; }
-        public function getLocalAddress(): string { return ''; }
-        public function isIpV4(): bool { return true; }
-        public function isIpV6(): bool { return false; }
-        public function close(mixed $data = null, bool $raw = false): void {}
-    };
-
-    $len = Redis::input($truncated, $connection);
+    $len = Redis::input($truncated, protocolStubConnection());
 
     // 0 means "need more data" — do not advance the read pointer.
     expect($len)->toBe(0);
+});
+
+/*
+|--------------------------------------------------------------------------
+| input() / measure() frame-length probe
+|--------------------------------------------------------------------------
+|
+| input() returns the byte length of the next complete RESP frame in the
+| buffer, or 0 when more bytes are needed. These exercise every measure()
+| branch — the cheap, server-free wins that close the last ~10% of the
+| protocol class.
+*/
+
+it('input sizes a simple-string frame exactly', function () {
+    // '+OK\r\n' is 5 bytes; input() must report the full frame length.
+    expect(Redis::input("+OK\r\n", protocolStubConnection()))->toBe(5);
+});
+
+it('input sizes an integer frame exactly', function () {
+    expect(Redis::input(":42\r\n", protocolStubConnection()))->toBe(5);
+});
+
+it('input sizes an error frame exactly', function () {
+    // '-ERR x\r\n' is 8 bytes.
+    expect(Redis::input("-ERR x\r\n", protocolStubConnection()))->toBe(8);
+});
+
+it('input sizes a bulk-string frame including the payload and trailing CRLF', function () {
+    // '$5\r\nhello\r\n' is 11 bytes.
+    expect(Redis::input("\$5\r\nhello\r\n", protocolStubConnection()))->toBe(11);
+});
+
+it('input sizes a null bulk-string frame as 5 bytes', function () {
+    // '$-1\r\n' — the measure() $-1 fast path returns the literal 5.
+    expect(Redis::input("\$-1\r\n", protocolStubConnection()))->toBe(5);
+});
+
+it('input sizes a null multi-bulk frame as 5 bytes', function () {
+    // '*-1\r\n' — the measure() *-1 fast path returns the literal 5.
+    expect(Redis::input("*-1\r\n", protocolStubConnection()))->toBe(5);
+});
+
+it('input sizes an empty array frame as 4 bytes', function () {
+    expect(Redis::input("*0\r\n", protocolStubConnection()))->toBe(4);
+});
+
+it('input sizes a nested multi-bulk (SCAN) frame exactly', function () {
+    // *2\r\n$1\r\n0\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n — sum of all child frames.
+    $wire = "*2\r\n\$1\r\n0\r\n*2\r\n\$3\r\nfoo\r\n\$3\r\nbar\r\n";
+    expect(Redis::input($wire, protocolStubConnection()))->toBe(\strlen($wire));
+});
+
+it('input returns 0 for an empty buffer', function () {
+    // measure() hits the `!isset($buffer[$offset])` guard.
+    expect(Redis::input('', protocolStubConnection()))->toBe(0);
+});
+
+it('input returns 0 when the first line has no CRLF yet', function () {
+    // measure() finds no "\r\n" and returns 0 (need more bytes).
+    expect(Redis::input("\$5\r\nhel", protocolStubConnection()))->toBe(0);
+});
+
+it('input returns 0 for a bulk frame whose payload is not fully buffered', function () {
+    // Header says 5 bytes but only 3 of "hello" are present.
+    expect(Redis::input("\$5\r\nhel", protocolStubConnection()))->toBe(0);
+});
+
+it('input returns 0 when a multi-bulk element header has no CRLF', function () {
+    // Outer header complete, but the single child '$3' has no CRLF — the
+    // recursive measure() call returns 0, so the whole frame is incomplete.
+    expect(Redis::input("*1\r\n\$3", protocolStubConnection()))->toBe(0);
+});
+
+it('input bails out with the buffer-length sentinel past MAX_DEPTH', function () {
+    // measure() recurses one level per nested '*1'. Beyond MAX_DEPTH (64) it
+    // stops descending and returns strlen-offset so input() treats the frame
+    // as consumed and the decoder produces the depth-exceeded protocol error.
+    // 70 levels > 64, so the sentinel branch (Redis.php line 62) fires.
+    $wire = str_repeat("*1\r\n", 70) . "\$3\r\nend\r\n";
+    $len = Redis::input($wire, protocolStubConnection());
+    // The depth-65 sentinel (strlen-offset) propagates up through the
+    // $cursor accumulation to sum to the full buffer length, so the frame is
+    // treated as complete and consumed in one shot.
+    expect($len)->toBe(\strlen($wire));
+});
+
+it('input treats an unknown leading type byte as a consumed (error) frame', function () {
+    // measure() default branch returns strlen-offset so input() reports the
+    // whole buffer as one frame; decode() then surfaces the protocol error.
+    $buffer = "?bogus\r\n";
+    expect(Redis::input($buffer, protocolStubConnection()))->toBe(\strlen($buffer));
+});
+
+/*
+|--------------------------------------------------------------------------
+| decode() / decodeOne() error & incomplete branches
+|--------------------------------------------------------------------------
+*/
+
+it('decodes a binary-safe bulk string containing an embedded CRLF', function () {
+    // The $length header makes the payload binary-safe — an embedded \r\n
+    // must NOT terminate the value early.
+    $payload = "ab\r\ncd";                       // 6 bytes incl. the CRLF
+    $wire = '$' . \strlen($payload) . "\r\n" . $payload . "\r\n";
+    [$type, $value] = Redis::decode($wire);
+    expect($type)->toBe('$');
+    expect($value)->toBe($payload);
+});
+
+it('decodes a bulk string containing a null byte', function () {
+    $payload = "a\0b";
+    $wire = '$' . \strlen($payload) . "\r\n" . $payload . "\r\n";
+    [$type, $value] = Redis::decode($wire);
+    expect($type)->toBe('$');
+    expect($value)->toBe($payload);
+});
+
+it('decodes a large bulk string (multi-KB) intact', function () {
+    $payload = str_repeat('x', 4096);
+    $wire = '$' . \strlen($payload) . "\r\n" . $payload . "\r\n";
+    [$type, $value] = Redis::decode($wire);
+    expect($type)->toBe('$');
+    expect($value)->toBe($payload);
+});
+
+it('decodes a negative integer reply', function () {
+    [$type, $value] = Redis::decode(":-7\r\n");
+    expect($type)->toBe(':');
+    expect($value)->toBe(-7);
+});
+
+it('returns a protocol-error tuple for an unknown leading type byte', function () {
+    // decodeOne()'s default branch returns null → decode() builds the '!' tuple
+    // with the offending byte and a hex dump of the buffer.
+    [$type, $value] = Redis::decode("?nope\r\n");
+    expect($type)->toBe('!');
+    expect($value)->toContain("got '?'");
+    expect($value)->toContain(bin2hex("?nope\r\n"));
+});
+
+it('returns a protocol-error tuple for an empty buffer', function () {
+    // decodeOne() hits `!isset($buffer[$offset])` → null → decode() reports
+    // an empty offending byte.
+    [$type, $value] = Redis::decode('');
+    expect($type)->toBe('!');
+    expect($value)->toContain("got ''");
+});
+
+it('returns null-shaped protocol error when the frame has no CRLF', function () {
+    // decodeOne() finds no "\r\n" → null → decode() wraps it as a '!' tuple.
+    [$type, $value] = Redis::decode("+partial");
+    expect($type)->toBe('!');
+});
+
+it('propagates a depth-exceeded error from a nested element', function () {
+    // An array whose single child blows MAX_DEPTH: the inner decodeOne returns
+    // the '!' depth error, which the parent loop propagates instead of nesting.
+    $depth = 70;
+    $wire = str_repeat("*1\r\n", $depth) . "\$3\r\nend\r\n";
+    [$type, $value] = Redis::decode($wire);
+    expect($type)->toBe('!');
+    expect($value)->toBe('protocol error: max array depth exceeded');
+});
+
+it('returns a protocol error when a nested array element has no CRLF', function () {
+    // Outer *2 promises two children; the first decodes, but the second
+    // ('+ab' with no trailing CRLF) makes decodeOne return null, which the
+    // parent loop propagates → decode() surfaces a '!' protocol-error tuple.
+    // (A truncated *bulk* would NOT hit this: decodeOne's $ branch substr()s
+    // optimistically, trusting input() to have gated completeness first.)
+    [$type] = Redis::decode("*2\r\n:1\r\n+ab");
+    expect($type)->toBe('!');
 });

@@ -239,6 +239,19 @@ iterator helper that supports both callback and Revolt coroutine modes:
   5 skipped** (the 5 are the RediSearch FT family in `tests/Feature/FtSearchTest.php`
   — see *Compatibility* in the README).
 
+#### Protocol coverage — `Protocols/Redis.php` to 100%
+
+- Added ~23 in-process unit tests (`tests/Unit/ProtocolTest.php`) for the RESP
+  codec, taking `src/Protocols/Redis.php` from ~90% to **100%** line + method
+  coverage. They cover the `input()`/`measure()` frame-length probe (every
+  branch, including the `MAX_DEPTH` sentinel and the null bulk/array fast paths),
+  incomplete-frame handling (returns 0 = "need more bytes"), and the
+  `decode()`/`decodeOne()` edge branches: binary-safe bulk strings with embedded
+  CRLF / null bytes, large multi-KB bulks, negative integers, the protocol-error
+  tuple for unknown/empty/no-CRLF input, and depth-exceeded propagation. All are
+  server-free (no backend required). Total merged line coverage rose to **69.48%**
+  and the coverage floor was ratcheted to **69**.
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was
