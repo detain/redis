@@ -20,7 +20,8 @@
     "require-dev": {
         "pestphp/pest": ">=1.23.1",
         "mockery/mockery": ">=1.6.12",
-        "phpstan/phpstan": ">=2.2.1"
+        "phpstan/phpstan": ">=2.2.1",
+        "revolt/event-loop": "^1.0"
     },
     "suggest": {
         "revolt/event-loop": "Enables coroutine-style synchronous return values when no callback is provided (requires PHP >=8.1)."

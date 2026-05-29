@@ -114,7 +114,50 @@ function skipTest(string $reason): void
 
 function runInWorker(string $snippet, int $timeout = 5)
 {
-    $runner = realpath(__DIR__ . '/Support/run-in-worker.php');
+    return runInWorkerScript(__DIR__ . '/Support/run-in-worker.php', $snippet, $timeout);
+}
+
+/**
+ * Coroutine-mode sibling of runInWorker().
+ *
+ * Runs $snippet inside a child that boots Workerman on the Revolt-backed
+ * `Workerman\Events\Fiber` driver (see Support/run-in-worker-coroutine.php).
+ * Under that driver `Revolt\EventLoop` is loaded and onWorkerStart runs inside
+ * a fiber, so commands the snippet issues WITHOUT a callback suspend the fiber
+ * and RETURN their reply synchronously:
+ *
+ *     $redis->set('k', 'v');     // 'OK'
+ *     $emit($redis->get('k'));   // emits 'v'
+ *
+ * Same fd-3 OK/FAIL protocol, coverage forwarding and env handling as
+ * runInWorker(); a free function for the same no-`@var $this`-in-closures
+ * reason documented on runInWorker().
+ *
+ * @param  string $snippet PHP code (no <?php) run after the worker boots, in a
+ *                         fiber, with $redis/$emit/$fail in scope.
+ * @param  int    $timeout Seconds before the child self-aborts.
+ * @return mixed           The value passed to $emit().
+ */
+function runInCoroutineWorker(string $snippet, int $timeout = 5)
+{
+    return runInWorkerScript(__DIR__ . '/Support/run-in-worker-coroutine.php', $snippet, $timeout);
+}
+
+/**
+ * Shared subprocess driver for runInWorker()/runInCoroutineWorker().
+ *
+ * Spawns $scriptPath via proc_open, feeds $snippet on stdin, forwards the
+ * REDIS_URL/REDIS_BACKEND env and (when set) the COVERAGE_DIR + pcov ini so the
+ * child can dump its own .cov, then reads the OK/FAIL result line off fd 3.
+ *
+ * @param  string $scriptPath Absolute path to the runner script.
+ * @param  string $snippet    PHP code executed inside the subprocess.
+ * @param  int    $timeout    Seconds before the child self-aborts.
+ * @return mixed              The decoded value emitted by the child.
+ */
+function runInWorkerScript(string $scriptPath, string $snippet, int $timeout = 5)
+{
+    $runner = realpath($scriptPath);
     $env = [
         'REDIS_URL' => getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379',
         'REDIS_BACKEND' => getenv('REDIS_BACKEND') ?: '',

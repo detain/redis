@@ -361,6 +361,29 @@ iterator helper that supports both callback and Revolt coroutine modes:
   `queueCommand`→`encode`→`onMessage` path), so the merged number holds at
   ~**77.9%**. The Redis leg stays at **zero skips**.
 
+#### Revolt coroutine-mode coverage — Feature tests
+
+- The client's coroutine path — when no callback is passed and `Revolt\EventLoop`
+  is loaded, `queueCommand()` suspends the current fiber and RETURNS the reply
+  synchronously (via `suspenstion()` + `onMessage` resume) — was previously
+  untested (every existing test runs callback mode). Added `revolt/event-loop` as
+  a dev dependency and `tests/Support/run-in-worker-coroutine.php`, a worker that
+  boots Workerman on its Revolt-backed `Workerman\Events\Fiber` driver so
+  `onWorkerStart` runs inside a fiber and callback-less commands return their
+  replies directly. Exposed via a new `runInCoroutineWorker()` helper in
+  `tests/Pest.php` (the shared proc_open logic is factored into
+  `runInWorkerScript()`; `runInWorker()` behaviour is unchanged).
+- Added `tests/Feature/CoroutineModeTest.php` (4 cases): synchronous `set`/`get`/
+  `incr`/`del` returns; `scanAll` returning the full key set synchronously; the
+  `hScanAll`/`sScanAll`/`zScanAll` coroutine aggregation loops; and the
+  `queueCommand` guard that throws when a coroutine-mode command is issued while
+  the connection is subscribe/monitor-locked (a fiber that could never resume).
+  This exercises the suspend/resume branch and all four coroutine `*ScanAll`
+  helpers. **Safety:** the existing callback worker references no Revolt/EventLoop
+  symbols, so `class_exists(EventLoop::class, false)` stays false there and the
+  callback suite is unaffected. `Client.php` merged **75.79% → 81.16%**; total
+  merged **77.93% → 82.82%**.
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was
