@@ -14,7 +14,7 @@
         }
     ],
     "require": {
-        "php": ">=8.1",
+        "php": ">=7.2",
         "workerman/workerman": "^4.1.0||^5.0.0"
     },
     "require-dev": {
@@ -23,7 +23,7 @@
         "phpstan/phpstan": ">=2.2.1"
     },
     "suggest": {
-        "revolt/event-loop": "Enables coroutine-style synchronous return values when no callback is provided."
+        "revolt/event-loop": "Enables coroutine-style synchronous return values when no callback is provided (requires PHP >=8.1)."
     },
     "autoload": {
         "psr-4": {"Workerman\\Redis\\": "./src"}

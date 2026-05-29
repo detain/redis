@@ -337,6 +337,20 @@ use Workerman\Timer;
 class Client
 {
     /**
+     * Commands that legitimately hold the connection open until the server
+     * replies (or the command's own server-side timeout fires). When one of
+     * these is the in-flight head of the queue the wait-timeout scan must not
+     * treat the connection as hung — nor time out the commands queued behind
+     * it, which are simply waiting on the block rather than stalled.
+     *
+     * @var string[]
+     */
+    const BLOCKING_COMMANDS = [
+        'BLPOP', 'BRPOP', 'BRPOPLPUSH', 'BLMOVE', 'BLMPOP',
+        'BZPOPMIN', 'BZPOPMAX', 'BZMPOP',
+    ];
+
+    /**
      * @var AsyncTcpConnection
      */
     protected $_connection = null;
@@ -449,7 +463,11 @@ class Client
         $this->_options = $options;
         $this->_connectionCallback = $callback;
         $this->connect();
-        Timer::add(1, function () {
+        // Periodic wait-timeout scan. Store the handle so close() can delete it
+        // — left dangling it would fire forever and, by capturing $this, keep
+        // the client object alive (a leak in workers that create clients
+        // dynamically).
+        $this->_waitTimeoutTimer = Timer::add(1, function () {
             if (empty($this->_queue)) {
                 return;
             }
@@ -464,16 +482,19 @@ class Client
             reset($this->_queue);
             $current_queue = current($this->_queue);
             $current_command = $current_queue[0][0];
-            $ignore_first_queue = in_array($current_command, ['BLPOP', 'BRPOP']);
+            if (\in_array($current_command, self::BLOCKING_COMMANDS, true)) {
+                // A blocking command at the head legitimately holds the
+                // connection until it returns (or hits its own server-side
+                // timeout); everything queued behind it is waiting on that
+                // block, not hung. Time out none of it — otherwise queued
+                // commands would be failed with a spurious "Wait Timeout"
+                // while they had never even been sent.
+                return;
+            }
             $time = time();
             $timeout = isset($this->_options['wait_timeout']) ? $this->_options['wait_timeout'] : 600;
             $has_timeout = false;
-            $first_queue = true;
             foreach ($this->_queue as $key => $queue) {
-                if ($first_queue && $ignore_first_queue) {
-                    $first_queue = false;
-                    continue;
-                }
                 if ($time - $queue[1] > $timeout) {
                     $has_timeout = true;
                     unset($this->_queue[$key]);
@@ -486,7 +507,7 @@ class Client
                     }
                 }
             }
-            if ($has_timeout && !$ignore_first_queue) {
+            if ($has_timeout) {
                 $this->closeConnection();
                 $this->connect();
             }
@@ -605,7 +626,12 @@ class Client
             }
             try {
                 \call_user_func($cb, $result, $this);
-            } catch (\Exception $exception) {
+            } catch (\Throwable $exception) {
+                // Catch \Throwable (not just \Exception) so a user callback
+                // that raises an Error — TypeError, DivisionByZeroError, … —
+                // can't escape before process() pumps the next command and
+                // wedge the queue. The captured throwable is re-thrown below,
+                // after the pump has run.
             }
 
             if ($type === '!') {
@@ -676,6 +702,21 @@ class Client
     protected function queueCommand(array $args, $cb = null, $format = null)
     {
         $need_suspend = !$cb && \class_exists(EventLoop::class, false);
+        if ($need_suspend && ($this->_subscribe || $this->_monitoring)) {
+            // In coroutine mode an ordinary command would suspend the current
+            // fiber until its reply arrives — but process() refuses to send
+            // anything while the connection is subscribe/monitor-locked, so the
+            // reply (and the resume) can never come while the lock holds. That
+            // is a silent, unrecoverable fiber hang. Fail loudly instead. Use a
+            // dedicated Client for ordinary commands, or pass an explicit
+            // callback (callback-mode commands queue and drain after the stream
+            // ends rather than suspending).
+            throw new Exception(
+                'Cannot issue a coroutine-mode Redis command while the connection '
+                . 'is in subscribe/monitor mode: the fiber could never be resumed. '
+                . 'Use a separate Client, or pass an explicit callback.'
+            );
+        }
         if ($need_suspend) {
             [$suspension, $cb] = $this->suspenstion();
         }
@@ -727,6 +768,59 @@ class Client
     }
 
     /**
+     * Whether a streaming command (SUBSCRIBE / PSUBSCRIBE / SSUBSCRIBE /
+     * MONITOR) is already active OR sitting in the queue waiting to be sent.
+     *
+     * The flag pair ($_subscribe / $_monitoring) only flips once process()
+     * actually puts the stream on the wire. Checking it alone misses the most
+     * common misuse — two subscribe() calls in a row before the first frame has
+     * been sent — where both entries are still queued and the flags are still
+     * false. So this also scans the queue for a pending stream verb.
+     *
+     * @return bool
+     */
+    protected function streamActiveOrPending()
+    {
+        if ($this->_subscribe || $this->_monitoring) {
+            return true;
+        }
+        foreach ($this->_queue as $entry) {
+            $verb = $entry[0][0] ?? '';
+            if ($verb === 'SUBSCRIBE' || $verb === 'PSUBSCRIBE'
+                || $verb === 'SSUBSCRIBE' || $verb === 'MONITOR') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Guard a subscribe-family entry point against the single-stream limit.
+     *
+     * This client pins ONE stream entry at the head of the queue and routes
+     * every incoming message to that entry's callback. A second subscribe while
+     * a stream is active or pending can't be honoured — process() is locked, so
+     * the frame would never reach the wire, and even if it did its messages
+     * would be delivered to the first callback, not this one. Rather than drop
+     * it silently, fail loudly: subscribe to every channel in a single call, or
+     * use a separate Client per stream.
+     *
+     * @param  string $method The calling method name, for the error message.
+     * @return void
+     */
+    protected function assertNoActiveStream($method)
+    {
+        if ($this->streamActiveOrPending()) {
+            throw new Exception(
+                "$method: the connection already has an active or pending "
+                . 'subscribe/monitor stream. This client supports one stream per '
+                . 'connection — pass all channels/patterns in a single subscribe '
+                . 'call, or use a separate Client for the additional stream.'
+            );
+        }
+    }
+
+    /**
      * subscribe
      *
      * @param $channels
@@ -734,6 +828,7 @@ class Client
      */
     public function subscribe($channels, $cb)
     {
+        $this->assertNoActiveStream('subscribe');
         $new_cb = function ($result) use ($cb) {
             if (!$result) {
                 echo $this->error();
@@ -769,6 +864,7 @@ class Client
      */
     public function pSubscribe($patterns, $cb)
     {
+        $this->assertNoActiveStream('pSubscribe');
         $new_cb = function ($result) use ($cb) {
             if (!$result) {
                 echo $this->error();
@@ -809,6 +905,7 @@ class Client
      */
     public function sSubscribe($channels, $cb)
     {
+        $this->assertNoActiveStream('sSubscribe');
         $new_cb = function ($result) use ($cb) {
             if (!$result) {
                 echo $this->error();
@@ -1014,7 +1111,10 @@ class Client
      */
     public function monitor($cb)
     {
-        if ($this->_monitoring || $this->_subscribe) {
+        // Silently ignore (documented contract) if a stream is already active —
+        // or merely queued and not yet sent, which the bare flag check would
+        // miss. See streamActiveOrPending().
+        if ($this->streamActiveOrPending()) {
             return;
         }
         $new_cb = function ($result) use ($cb) {
@@ -1054,7 +1154,13 @@ class Client
     public function select($db, $cb = null)
     {
         $format = function ($result) use ($db) {
-            $this->_db = $db;
+            // Only record the new DB once the server has confirmed the switch.
+            // On a failed SELECT onMessage hands the formatter $result === false;
+            // updating _db then would make the next reconnect re-issue a SELECT
+            // to a DB the server never accepted.
+            if ($result !== false) {
+                $this->_db = $db;
+            }
             return $result;
         };
         return $this->queueCommand(['SELECT', $db], $cb ?: function () {}, $format);
@@ -1070,7 +1176,12 @@ class Client
     public function auth($auth, $cb = null)
     {
         $format = function ($result) use ($auth) {
-            $this->_auth = $auth;
+            // Only remember the credential once the server has accepted it.
+            // A failed AUTH delivers $result === false here; recording it would
+            // make the next reconnect replay a credential the server rejected.
+            if ($result !== false) {
+                $this->_auth = $auth;
+            }
             return $result;
         };
         $args = \is_array($auth) ? \array_merge(['AUTH'], $auth) : ['AUTH', $auth];
@@ -1632,6 +1743,13 @@ class Client
     public function close()
     {
         $this->closeConnection();
+        // Tear down the periodic wait-timeout scan installed by the
+        // constructor; without this the timer keeps firing and its closure
+        // keeps $this alive, defeating the gc_collect_cycles() below.
+        if ($this->_waitTimeoutTimer) {
+            Timer::del($this->_waitTimeoutTimer);
+            $this->_waitTimeoutTimer = null;
+        }
         $this->_queue = [];
         gc_collect_cycles();
         if (function_exists('gc_mem_caches')) {

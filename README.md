@@ -23,6 +23,18 @@ Wire-compatible with both Redis and [Dragonfly](https://www.dragonflydb.io/). Su
 - **Callback mode** — works out of the box, no extra dependencies.
 - **Coroutine mode** — if [`revolt/event-loop`](https://github.com/revoltphp/event-loop) is installed, methods can be called without a callback and the current fiber suspends until the result arrives.
 
+## Requirements
+
+- **Runtime: PHP ≥ 7.2** for callback mode — the library code itself carries no
+  PHP 8-only syntax, and Composer resolves Workerman to v4 on PHP 7.
+- **Coroutine mode requires PHP ≥ 8.1** with
+  [`revolt/event-loop`](https://github.com/revoltphp/event-loop) installed (and,
+  for Workerman v5's fiber loop, Workerman ≥ 5). It is gated at runtime via
+  `class_exists()`, so on PHP 7 it simply stays off and you use callbacks.
+- **Development/test tooling requires PHP ≥ 8.1** (Pest 4, PHPStan 2). This only
+  affects contributors running the suite — it does **not** affect applications
+  that pull the package in as a dependency.
+
 ## Install
 
 ```
@@ -190,13 +202,27 @@ subscribe callback if you need it. `pUnsubscribe()` mirrors it for
 channels. Calling them when not subscribed is a no-op that still invokes the
 callback. To stop listening entirely you can also just `close()` the client.
 
+> **One stream per connection.** A `Client` pins a single streaming entry and
+> routes every incoming message to its callback, so a connection can host **one**
+> active subscription at a time. Subscribe to every channel/pattern you need in a
+> single call — `subscribe(['a', 'b', 'c'], $cb)`. A second `subscribe()` /
+> `pSubscribe()` / `sSubscribe()` (or mixing the families) on a connection that
+> already has an active or pending stream throws a `Workerman\Redis\Exception`
+> rather than silently doing nothing; use a separate `Client` for an additional
+> stream. The same one-stream rule applies in coroutine mode: issuing an ordinary
+> (suspending) command while the connection is subscribe/monitor-locked throws,
+> because its reply could never arrive to resume the fiber — run ordinary
+> commands on a different `Client`.
+
 ## Monitor
 
 `monitor()` streams every command the server processes to your callback — the
 debugging counterpart to `redis-cli MONITOR`. Like `subscribe()` it locks the
 connection (its own internal flag); there is no "unmonitor", so you stop it by
 `close()`ing the client. The opening `+OK` handshake is swallowed; each later
-call is one raw monitor line.
+call is one raw monitor line. Like the subscribe family it is one-stream-per-
+connection — calling `monitor()` on a connection that already has an active or
+pending stream is ignored.
 
 ```php
 $debug = new Client('redis://127.0.0.1:6379');
@@ -431,6 +457,10 @@ composer test:coverage # Pest with coverage (requires Xdebug or PCOV)
 ```
 
 Integration tests connect to a real Redis/Dragonfly at `REDIS_URL` (default `redis://127.0.0.1:6379`). Tests skip cleanly when no server is reachable.
+
+> The test/static-analysis toolchain (Pest 4, PHPStan 2) needs **PHP ≥ 8.1**.
+> The library itself runs on **PHP ≥ 7.2** in callback mode — the `>=8.1` dev
+> requirement only applies to running the suite, not to consuming the package.
 
 ## Testing & continuous integration
 

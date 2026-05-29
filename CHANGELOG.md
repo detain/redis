@@ -244,6 +244,47 @@ iterator helper that supports both callback and Revolt coroutine modes:
   lost their timeout guard for the life of the connection. It now *skips* while
   streaming and resumes afterward.
 
+#### Async hardening (full-source review pass)
+
+- **Wait-timeout scan leaked its timer — the client could never be GC'd.** The
+  constructor's `Timer::add(1, …)` handle was never stored, so `close()` could
+  not delete it: the timer kept firing forever, and because its closure captures
+  `$this` the client object stayed pinned in memory (defeating the
+  `gc_collect_cycles()` in `close()`). In a worker that creates clients
+  dynamically this leaked one object + one timer per client. The handle is now
+  kept in the (previously unused) `$_waitTimeoutTimer` property and torn down in
+  `close()`.
+- **Coroutine command on a subscribe/monitor-locked connection hung the fiber.**
+  In Revolt mode `queueCommand()` suspends the current fiber until the reply
+  arrives — but `process()` refuses to send anything while the connection is in
+  subscribe/monitor mode, so the reply (and the resume) could never come while
+  the lock held. That was a silent, unrecoverable hang. It now throws a clear
+  `Workerman\Redis\Exception` instead of suspending.
+- **A second `subscribe()` / `pSubscribe()` / `sSubscribe()` was silently
+  dropped.** This client pins one stream entry at the head of the queue and
+  routes every message to that entry's callback; a second subscribe while one is
+  active or pending can't reach the wire (the lock) and its messages would go to
+  the first callback anyway. It now throws rather than failing silently. The
+  guard inspects both the live flags **and** the queue, so it also catches
+  back-to-back calls issued before the first frame is sent (when the flags are
+  still false). `monitor()` keeps its documented silent-ignore contract but
+  reuses the same active-or-pending detection.
+- **`select()` / `auth()` cached state on a *failed* reply.** Their `format`
+  callbacks ran regardless of success, so a rejected `SELECT`/`AUTH` still
+  updated `$_db`/`$_auth` — which the next reconnect would then replay. They now
+  mutate only when the reply was not an error.
+- **Wait-timeout false positives around blocking commands.** The scan only
+  exempted `BLPOP`/`BRPOP`, so a long-blocking `BRPOPLPUSH`/`BLMOVE`/`BLMPOP`/
+  `BZPOPMIN`/`BZPOPMAX`/`BZMPOP` at the head could trip a reconnect, and commands
+  queued *behind* any blocker were failed with a spurious "Wait Timeout" despite
+  never having been sent. A `BLOCKING_COMMANDS` set now covers the full family,
+  and when the head is a blocking command the scan returns early — nothing behind
+  it is timed out.
+- **Callback exceptions caught `\Exception`, not `\Throwable`.** An `\Error`
+  (e.g. `TypeError`) thrown from a user callback escaped `onMessage()` before
+  `process()` could pump the next command, wedging the queue. Widened to
+  `catch (\Throwable …)` (still re-thrown after the pump runs).
+
 ### Changed
 
 - **Requirement: PHP `>=7` → `>=8.1`** (Pest 3+/4 needs it).
