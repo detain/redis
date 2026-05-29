@@ -237,7 +237,7 @@ use Workerman\Timer;
  * @method static array topkInfo($key, $cb = null)
  * Streams methods
  * @method static int xAck($stream, $group, $arrMessages, $cb = null)
- * @method static string xAdd($strKey, $strId, $arrMessage, $iMaxLen = 0, $booApproximate = false, $cb = null)
+ * @method static string xAdd($key, $id, array $message, $maxLen = 0, $approximate = false, $cb = null)
  * @method static array xClaim($strKey, $strGroup, $strConsumer, $minIdleTime, $arrIds, $arrOptions = [], $cb = null)
  * @method static int xDel($strKey, $arrIds, $cb = null)
  * @method static mixed xGroup($command, $strKey, $strGroup, $strMsgId, $booMKStream = null, $cb = null)
@@ -1319,6 +1319,65 @@ class Client
     {
         $args = [$command, $key];
         foreach ($array as $field => $value) {
+            $args[] = $field;
+            $args[] = $value;
+        }
+        return $this->queueCommand($args, $cb);
+    }
+
+    /**
+     * XADD — append an entry to a stream.
+     *
+     * Explicit method because the RESP encoder flattens a nested array arg by
+     * emitting its VALUES ONLY (foreach ($item as $str) in Protocols\Redis::
+     * encode()). Passing an associative field=>value message through __call()
+     * therefore drops the field names and the server rejects the command with
+     * "wrong number of arguments". This method flattens the message itself —
+     * each field and its value become separate wire tokens — so callers can
+     * use the natural ['field' => 'value'] shape.
+     *
+     * $message must be a non-empty associative map of field => value. A bare
+     * indexed list would be sent as field "0", value <first>, … which is not
+     * what you want; keep field names explicit.
+     *
+     * Optional capping mirrors phpredis: pass $maxLen > 0 to add `MAXLEN n`,
+     * and $approximate = true to make it `MAXLEN ~ n` (cheaper trimming). A
+     * callable in the $maxLen or $approximate slot is taken as the callback,
+     * so `$redis->xAdd($key, '*', $msg, $cb)` works without spelling out the
+     * cap arguments — the same trailing-callback shortcut used by flushDb()
+     * and bgSave().
+     *
+     * @param  string         $key
+     * @param  string         $id          Entry ID, or '*' to let the server assign one.
+     * @param  array          $message     Associative field => value map (non-empty).
+     * @param  int|callable    $maxLen      Cap the stream length, or the callback.
+     * @param  bool|callable   $approximate true for `MAXLEN ~`, or the callback.
+     * @param  callable|null   $cb          function(string $id, Client $client): void
+     * @return mixed                        Coroutine mode: the entry ID. Callback mode: null.
+     */
+    public function xAdd($key, $id, array $message, $maxLen = 0, $approximate = false, $cb = null)
+    {
+        if (\is_callable($maxLen)) {
+            $cb = $maxLen;
+            $maxLen = 0;
+            $approximate = false;
+        } elseif (\is_callable($approximate)) {
+            $cb = $approximate;
+            $approximate = false;
+        }
+        if (empty($message)) {
+            throw new \InvalidArgumentException('xAdd requires a non-empty field => value message');
+        }
+        $args = ['XADD', $key];
+        if ($maxLen > 0) {
+            $args[] = 'MAXLEN';
+            if ($approximate) {
+                $args[] = '~';
+            }
+            $args[] = $maxLen;
+        }
+        $args[] = $id;
+        foreach ($message as $field => $value) {
             $args[] = $field;
             $args[] = $value;
         }

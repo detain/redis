@@ -418,12 +418,9 @@ it('zLexCount counts members in a lex range', function () {
 
 it('xAutoClaim transfers idle PEL entries to a new consumer', function () {
 
-    // XADD wire form: XADD key id field value [field value ...]. The encoder
-    // flattens 1 level of array nesting but only emits values, so pass the
-    // field/value pair as a flat indexed array.
     $result = runInWorker(<<<'PHP'
         $redis->del('pest:modern:t22:stream', function () use ($redis, $emit) {
-            $redis->rawCommand('XADD', 'pest:modern:t22:stream', '*', 'k', 'v', function () use ($redis, $emit) {
+            $redis->xAdd('pest:modern:t22:stream', '*', ['k' => 'v'], function () use ($redis, $emit) {
                 $redis->xGroup('CREATE', 'pest:modern:t22:stream', 'g1', '0', function () use ($redis, $emit) {
                     // Consumer 'c1' reads — entry now in PEL.
                     $redis->rawCommand('XREADGROUP', 'GROUP', 'g1', 'c1', 'COUNT', 1, 'STREAMS', 'pest:modern:t22:stream', '>', function () use ($redis, $emit) {
@@ -444,11 +441,9 @@ it('xAutoClaim transfers idle PEL entries to a new consumer', function () {
 
 it('xSetId updates the last-generated-id of a stream', function () {
 
-    // Use rawCommand for XADD to avoid the @method's $arrMessage shape
-    // mismatch (the encoder only emits array values, not keys).
     $result = runInWorker(<<<'PHP'
         $redis->del('pest:modern:t23:stream', function () use ($redis, $emit) {
-            $redis->rawCommand('XADD', 'pest:modern:t23:stream', '1-1', 'k', 'v', function () use ($redis, $emit) {
+            $redis->xAdd('pest:modern:t23:stream', '1-1', ['k' => 'v'], function () use ($redis, $emit) {
                 // XSETID requires an id >= current top. Pick one larger than 1-1.
                 $redis->xSetId('pest:modern:t23:stream', '999-0', function ($ok) use ($emit) {
                     $emit($ok);
@@ -458,4 +453,53 @@ it('xSetId updates the last-generated-id of a stream', function () {
     PHP);
 
     expect($result)->toBeTrue();
+});
+
+it('xAdd flattens an associative message so field names survive the wire', function () {
+
+    // Regression for the encoder-only-emits-values bug: a ['field' => 'value']
+    // message routed through __call() drops the field NAMES (the RESP encoder
+    // iterates array args as values only), and the server rejects it. The
+    // explicit xAdd() flattens the pairs itself, so XRANGE must read back both
+    // the field names and their values in order.
+    $result = runInWorker(<<<'PHP'
+        $redis->del('pest:modern:t24:stream', function () use ($redis, $emit) {
+            $redis->xAdd('pest:modern:t24:stream', '*', ['temperature' => '25', 'humidity' => '60'], function ($id) use ($redis, $emit) {
+                $redis->xRange('pest:modern:t24:stream', '-', '+', function ($entries) use ($emit, $id) {
+                    // XRANGE reply: [[id, [field, value, field, value, ...]], ...]
+                    $emit([
+                        'id'     => $id,
+                        'fields' => $entries[0][1],
+                    ]);
+                });
+            });
+        });
+    PHP);
+
+    expect($result['id'])->toBeString();
+    expect($result['id'])->not->toBe('');
+    expect($result['fields'])->toBe(['temperature', '25', 'humidity', '60']);
+});
+
+it('xAdd caps the stream with MAXLEN when a length is given', function () {
+
+    // Push four entries with MAXLEN 2 (exact) — only the last two survive,
+    // proving the MAXLEN argument lands before the id on the wire.
+    $result = runInWorker(<<<'PHP'
+        $redis->del('pest:modern:t25:stream', function () use ($redis, $emit) {
+            $redis->xAdd('pest:modern:t25:stream', '*', ['n' => '1'], function () use ($redis, $emit) {
+                $redis->xAdd('pest:modern:t25:stream', '*', ['n' => '2'], function () use ($redis, $emit) {
+                    $redis->xAdd('pest:modern:t25:stream', '*', ['n' => '3'], 2, function () use ($redis, $emit) {
+                        $redis->xAdd('pest:modern:t25:stream', '*', ['n' => '4'], 2, function () use ($redis, $emit) {
+                            $redis->xLen('pest:modern:t25:stream', function ($len) use ($emit) {
+                                $emit($len);
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    PHP);
+
+    expect($result)->toBe(2);
 });
