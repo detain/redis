@@ -285,6 +285,28 @@ iterator helper that supports both callback and Revolt coroutine modes:
   free helper in `tests/Pest.php` for behaviour-gated (non-backend-name) skips.
   `Client.php` merged **68.5% → 70.4%**; total merged **71.3% → 73.0%**.
 
+#### Data-type command sweep — Feature tests
+
+- Added 57 Feature cases across `tests/Feature/KeyspaceCommandsTest.php` (13),
+  `StringsCountersTest.php` (13), `ListSetZsetExtraTest.php` (19) and
+  `HashStreamExtraTest.php` (13), covering the classic data-type and keyspace
+  verbs not already exercised by `ModernCommandsTest`/`StringsKeysExtraTest`/the
+  SCAN-family tests:
+  - **Keyspace:** `type`, `rename`/`renameNx`, `persist`, `expire`/`pExpire`,
+    `exists` (multi + repeat), `unlink`, `keys`, `randomKey`, `dump`+`restore`
+    (binary cross-key round-trip), `object` ENCODING/REFCOUNT, `move`.
+  - **Strings/counters:** `append`, `strLen`, `setRange`/`getRange`, `getSet`,
+    `incrBy`/`decrBy`/`incrByFloat`, `setEx`/`pSetEx`/`setNx`, `setBit`/`getBit`,
+    `mSet`/`mGet`, `mSetNx`.
+  - **Lists/sets/zsets:** the classic `lPush`…`lTrim`/`rPopLPush`,
+    `sAdd`…`sDiffStore`, `zAdd`…`zPopMin`/`zPopMax` families.
+  - **Hashes/streams:** `hSet`…`hStrLen`, `xAdd`/`xLen`/`xRange`/`xRevRange`/
+    `xRead`/`xDel`/`xTrim`.
+  Assertions pin real values (counts, members, scores-as-strings, `hGetAll`/
+  `hMGet` maps, dump→restore value equality). One backend-gated skip
+  (`OBJECT` is unknown on Dragonfly; the test runs on Redis). `Client.php` merged
+  **70.4% → 72.95%**; total merged **73.0% → 75.34%**.
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was
