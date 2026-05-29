@@ -453,10 +453,15 @@ Anything without a shortcut goes through the dispatcher directly, e.g.
 composer install
 composer test          # Pest
 composer analyze       # PHPStan
-composer test:coverage # Pest with coverage (requires Xdebug or PCOV)
+composer test:coverage # merged subprocess coverage (sh bin/run-coverage.sh; needs PCOV or Xdebug)
 ```
 
 Integration tests connect to a real Redis/Dragonfly at `REDIS_URL` (default `redis://127.0.0.1:6379`). Tests skip cleanly when no server is reachable.
+
+The suite is run against **both engines** via the `Makefile` — see *Testing &
+continuous integration* below. Any change must stay green on **both** Dragonfly
+and Redis; a case that can only pass on one engine must be skipped with a logged
+reason via `skipOnBackend()` (never a silent skip) and listed under *Compatibility*.
 
 > The test/static-analysis toolchain (Pest 4, PHPStan 2) needs **PHP ≥ 8.1**.
 > The library itself runs on **PHP ≥ 7.2** in callback mode — the `>=8.1` dev
@@ -464,10 +469,11 @@ Integration tests connect to a real Redis/Dragonfly at `REDIS_URL` (default `red
 
 ## Testing & continuous integration
 
-The fork ships with a [Pest](https://pestphp.com/) test suite —
-**198 tests / 620 assertions, all green against a live Dragonfly** — split into
-two tiers, so most of the code can be exercised without a server and the rest is
-verified end-to-end against a live engine:
+The fork ships with a [Pest](https://pestphp.com/) test suite run against **both
+Dragonfly and Redis** — **201 passed / 0 skipped on Dragonfly**, **196 passed /
+5 skipped on Redis** (the 5 skips are the RediSearch FT family; see
+*Compatibility* below). It is split into two tiers, so most of the code can be
+exercised without a server and the rest is verified end-to-end against a live engine:
 
 - **Unit suite (`tests/Unit/`) — no server needed.** Pure, mock-style tests that
   run anywhere:
@@ -491,27 +497,87 @@ verified end-to-end against a live engine:
 Static analysis runs alongside the tests: **PHPStan** (level 5, with a baseline
 that freezes legacy typing issues so new code can't regress).
 
+### Running against both backends
+
+The suite runs against **both** Dragonfly and a real Redis, locally and in CI.
+Locally the two engines listen on different ports and the `Makefile` selects one
+per leg via the `REDIS_URL` + `REDIS_BACKEND` pair:
+
+| Target | Engine | `REDIS_URL` |
+|--------|--------|-------------|
+| `make test-dragonfly` | Dragonfly | `redis://127.0.0.1:6379` |
+| `make test-redis` | Redis | `redis://127.0.0.1:63790` |
+| `make test-all` | both, sequentially (fails if either leg fails) | — |
+| `make coverage` | Dragonfly leg only | `redis://127.0.0.1:6379` |
+
+`scripts/start-dragonfly.sh` and `scripts/start-redis.sh` are idempotent
+helpers that detect-and-confirm a running engine on each port (`make help` lists
+every target). **Both engines must stay green.** A case that can only pass on one
+engine is skipped — never silently — with `skipOnBackend('redis', 'reason')` /
+`skipOnBackend('dragonfly', 'reason')` (free helpers in `tests/Pest.php`, keyed on
+`REDIS_BACKEND`); every skip prints `[<backend>] <reason>` and is documented under
+*Compatibility* below.
+
+### Coverage
+
+Feature tests run each assertion inside a `proc_open`ed Workerman worker child,
+so pcov in the parent process never instrumented `src/Client.php` — it reported
+a false **0.0%**. The worker now collects coverage *inside the child* (gated on a
+`COVERAGE_DIR` env) and dumps a per-invocation `.cov`; `bin/merge-coverage.php`
+merges every child `.cov` (plus the in-process Unit `unit.cov`) into
+`coverage.xml` (Clover) and a text summary, and `bin/run-coverage.sh` orchestrates
+the run. Run it with `make coverage` or `composer test:coverage` (both need PCOV
+or Xdebug).
+
+With the merge in place the real numbers are:
+
+| File | Line coverage |
+|------|---------------|
+| `src/Client.php` | **~66.5%** (632/950) |
+| `src/Protocols/Redis.php` | **~90.2%** |
+| **Total** | **~68.6%** (715/1042) |
+
+`bin/merge-coverage.php` enforces a **coverage floor** (`--min` / `COVERAGE_MIN`)
+and exits non-zero below it; the floor starts at **65** and is ratcheted toward
+95 over time. This is the canonical gate — CI fails below it.
+
+### Compatibility
+
+The suite is green on both engines except for documented, server-side divergences
+that are skipped on the affected backend with a logged reason (`skipOnBackend`),
+never silently:
+
+| Skipped on | Tests | Reason |
+|------------|-------|--------|
+| Redis | `tests/Feature/FtSearchTest.php` — `ftSearch`, `ftInfo`, `ftDropIndex`, `ftAggregate`, plus the index-lifecycle case (5 total) | On the RediSearch build under test, `FT.CREATE` returns `+OK` and `FT._LIST` shows the index, but `FT.SEARCH`/`FT.AGGREGATE` reply `SEARCH_INDEX_NOT_FOUND` (the index is listed but not queryable) — reproducible with raw `redis-cli`. The FT family is fully covered on Dragonfly. |
+
 ### GitHub Actions
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and
 pull request to `master` (and on demand via `workflow_dispatch`):
 
-- **Matrix across PHP 8.1, 8.2, and 8.3.**
-- **A live Dragonfly** is brought up as a service container
-  (`docker.dragonflydb.io/dragonflydb/dragonfly` on port 6379), so the Feature
-  suite runs against the fork's canonical compatibility target on every run —
-  not just mocks.
-- **PHPStan + Pest** execute on all three legs; the 8.3 leg additionally
-  collects line coverage with **PCOV** and uploads a Clover report to
+- **Matrix across PHP 8.1, 8.2, and 8.3 × backend `[dragonfly, redis]`**
+  (fail-fast disabled), so the full suite runs against **both engines** on every
+  push and PR — not just mocks, and not just Dragonfly.
+- **Each leg starts exactly one engine** on `127.0.0.1:6379` as a service
+  container: the Dragonfly image
+  (`docker.dragonflydb.io/dragonflydb/dragonfly`), or
+  `redis/redis-stack-server:latest` on the Redis leg so the JSON / Bloom / CMS /
+  TopK / FT modules are available there too.
+- **PHPStan + Pest** execute on every leg; the single
+  `php=8.3 && backend=dragonfly` leg additionally collects merged line coverage
+  with **PCOV** (via `composer test:coverage`) and uploads a Clover report to
   **[Codecov](https://codecov.io/gh/detain/redis)** and
   **[Codacy](https://app.codacy.com/gh/detain/redis/dashboard)** (a dedicated
-  `codacy-coverage-reporter` job consumes the artifact).
+  `codacy-coverage-reporter` job consumes the artifact). The coverage floor gate
+  fails the run below the minimum (see *Coverage* above).
 - Composer downloads are cached per PHP version to keep runs fast.
 
-Because every new command landed with its own integration test, **coverage of
-the code added in this fork runs at nearly 95%** — each dispatcher, explicit
-method, and the rewritten RESP decoder is exercised by at least one live test.
-Coverage badges at the top of this README reflect the latest `master` run.
+Current merged coverage is **~68.6%** total (`Client.php` ~66.5%,
+`Protocols/Redis.php` ~90.2%) — the subprocess-merge fix surfaced the real
+end-to-end numbers that pcov in the parent process used to miss. The floor is
+ratcheted toward 95% as coverage grows. Coverage badges at the top of this README
+reflect the latest `master` run.
 
 ## Documentation
 

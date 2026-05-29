@@ -15,6 +15,64 @@ uses(\Tests\RedisTestCase::class)->in('Feature');
 
 /*
 |--------------------------------------------------------------------------
+| Backend awareness (dual-engine testing: Dragonfly + Redis)
+|--------------------------------------------------------------------------
+|
+| The same suite runs against both engines, selected per-run by the
+| REDIS_URL + REDIS_BACKEND env pair (see the Makefile targets). These
+| free functions let an individual assertion react to which engine is
+| under test — primarily to skip a case that is a *legitimate,
+| documented* engine behavioural divergence (never a silent skip).
+|
+| Free functions (not RedisTestCase methods) for the same reason
+| runInWorker() is: the project forbids the `@var $this` workaround in
+| Pest closures on PHP 8.1 / phpstan 2.x.
+|
+*/
+
+/**
+ * The engine the current run targets, lower-cased.
+ *
+ * Set by the Makefile (`REDIS_BACKEND=dragonfly|redis`). Falls back to
+ * 'unknown' when running pest directly without the env var.
+ *
+ * @return string e.g. 'dragonfly', 'redis', or 'unknown'
+ */
+function currentBackend(): string
+{
+    $backend = getenv('REDIS_BACKEND');
+
+    return strtolower(($backend === false || $backend === '') ? 'unknown' : $backend);
+}
+
+/**
+ * Skip the current test when it is running against $backend.
+ *
+ * Used to gate a single assertion that is a genuine engine divergence
+ * (reply shape / format / semantics that differs between Redis and
+ * Dragonfly and is NOT a bug in this client). The reason is surfaced in
+ * the test output, prefixed with the backend, so skips are never silent.
+ *
+ * @param string $backend Engine to skip on ('redis' or 'dragonfly').
+ * @param string $reason  Specific divergence being avoided.
+ */
+function skipOnBackend(string $backend, string $reason): void
+{
+    $backend = strtolower($backend);
+    if (currentBackend() === $backend) {
+        // Throw the same exception PHPUnit's markTestSkipped() raises. Using a
+        // free function (not $this->markTestSkipped() / test()->...) keeps this
+        // PHPStan-clean: test() returns a TestCall|HigherOrderTapProxy union on
+        // which markTestSkipped() is not declared, and the project forbids
+        // @var $this PHPDoc in Pest closures. The exception is the public,
+        // documented skip mechanism and PHPUnit reports it as a skip with the
+        // message, so the reason stays visible in the output.
+        throw new \PHPUnit\Framework\SkippedWithMessageException("[{$backend}] {$reason}");
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
 | runInWorker helper
 |--------------------------------------------------------------------------
 |
@@ -43,16 +101,36 @@ function runInWorker(string $snippet, int $timeout = 5)
     $runner = realpath(__DIR__ . '/Support/run-in-worker.php');
     $env = [
         'REDIS_URL' => getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379',
+        'REDIS_BACKEND' => getenv('REDIS_BACKEND') ?: '',
         'REDIS_TEST_TIMEOUT' => (string) $timeout,
         'PATH' => getenv('PATH'),
     ];
+
+    // When COVERAGE_DIR is set (the merged-coverage pipeline, see
+    // bin/run-coverage.sh) the child must collect its own coverage. pcov only
+    // records when pcov.enabled=1, and that flag is PHP_INI_SYSTEM — it cannot
+    // be turned on with ini_set() inside the child, so it has to be passed on
+    // the command line here. We also forward COVERAGE_DIR so run-in-worker.php
+    // knows where to dump its cov-<uniq>.cov file.
+    $coverageDir = getenv('COVERAGE_DIR');
+    $cmd = [PHP_BINARY];
+    if (is_string($coverageDir) && $coverageDir !== '') {
+        $env['COVERAGE_DIR'] = $coverageDir;
+        $cmd[] = '-d';
+        $cmd[] = 'pcov.enabled=1';
+        $cmd[] = '-d';
+        $cmd[] = 'pcov.directory=' . dirname(__DIR__) . '/src';
+    }
+    $cmd[] = $runner;
+    $cmd[] = 'start';
+
     $descriptors = [
         0 => ['pipe', 'r'],
         1 => ['pipe', 'w'],
         2 => ['pipe', 'w'],
         3 => ['pipe', 'w'],
     ];
-    $proc = proc_open([PHP_BINARY, $runner, 'start'], $descriptors, $pipes, null, $env);
+    $proc = proc_open($cmd, $descriptors, $pipes, null, $env);
     if (!\is_resource($proc)) {
         throw new \RuntimeException('Could not spawn run-in-worker child');
     }

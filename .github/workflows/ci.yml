@@ -12,31 +12,69 @@ permissions:
 
 jobs:
   test:
-    name: Pest + PHPStan (PHP ${{ matrix.php }})
+    name: Pest + PHPStan (PHP ${{ matrix.php }} / ${{ matrix.backend }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         php: ['8.1', '8.2', '8.3']
+        # Run the full suite against BOTH engines. The redis leg uses
+        # redis-stack-server so JSON/BF/CMS/TopK/FT module commands run there too.
+        backend: [dragonfly, redis]
     env:
       REDIS_URL: redis://127.0.0.1:6379
-    services:
-      dragonfly:
-        image: docker.dragonflydb.io/dragonflydb/dragonfly
-        ports:
-          - 6379:6379
-        options: >-
-          --ulimit memlock=-1
+      REDIS_BACKEND: ${{ matrix.backend }}
+    # NOTE on per-leg engine selection: GitHub Actions `services:` can't be
+    # conditionally enabled per matrix value — listing both would start both and
+    # the two engines would clash on 6379. So we deliberately do NOT use the
+    # `services:` key and instead start exactly ONE engine container per leg in a
+    # step gated on `matrix.backend`, both bound to 127.0.0.1:6379. Only one leg
+    # runs per matrix combination, so the shared host port never clashes, and
+    # each leg provably talks to the right engine on redis://127.0.0.1:6379.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Start Dragonfly
+        if: matrix.backend == 'dragonfly'
+        run: |
+          docker run -d --name redis-engine \
+            -p 6379:6379 \
+            --ulimit memlock=-1 \
+            docker.dragonflydb.io/dragonflydb/dragonfly
+
+      - name: Start Redis (redis-stack-server, with modules)
+        if: matrix.backend == 'redis'
+        run: |
+          # redis-stack-server ships RedisJSON, RedisBloom (incl. CMS/TopK) and
+          # RediSearch on 6379 (RedisInsight on 8001 is irrelevant here).
+          docker run -d --name redis-engine \
+            -p 6379:6379 \
+            --health-cmd "redis-cli ping" \
+            --health-interval 5s \
+            --health-timeout 3s \
+            --health-retries 20 \
+            redis/redis-stack-server:latest
+
+      - name: Wait for the engine to accept connections
+        run: |
+          for i in $(seq 1 60); do
+            if (exec 3<>/dev/tcp/127.0.0.1/6379) 2>/dev/null; then
+              echo "engine is up on 127.0.0.1:6379"; exit 0
+            fi
+            echo "waiting for engine on 6379 ($i)..."; sleep 2
+          done
+          echo "engine did not come up on 6379" >&2
+          docker logs redis-engine || true
+          exit 1
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           extensions: pcntl, posix, sockets, json
-          coverage: ${{ matrix.php == '8.3' && 'pcov' || 'none' }}
+          # Coverage instrumentation is only needed on the single coverage leg.
+          coverage: ${{ (matrix.php == '8.3' && matrix.backend == 'dragonfly') && 'pcov' || 'none' }}
           tools: composer:v2
 
       - name: Get composer cache directory
@@ -57,16 +95,22 @@ jobs:
       - name: Run PHPStan
         run: composer analyze
 
+      # Coverage runs on exactly ONE leg (php=8.3 && backend=dragonfly) via the
+      # merge pipeline, which captures Client.php (subprocess coverage). Every
+      # other leg runs the plain Pest suite.
       - name: Run Pest
-        if: matrix.php != '8.3'
+        if: ${{ !(matrix.php == '8.3' && matrix.backend == 'dragonfly') }}
         run: vendor/bin/pest --colors=never
 
-      - name: Run Pest with coverage
-        if: matrix.php == '8.3'
-        run: vendor/bin/pest --colors=never --coverage --coverage-clover=coverage.xml
+      - name: Run Pest with merged coverage (canonical floor gate)
+        if: ${{ matrix.php == '8.3' && matrix.backend == 'dragonfly' }}
+        # composer test:coverage runs bin/run-coverage.sh -> merge-coverage.php
+        # --min=<floor>, which produces coverage.xml AND fails the build if the
+        # merged total line coverage drops below the floor (initial 65).
+        run: composer test:coverage
 
       - name: Upload coverage artifact
-        if: matrix.php == '8.3'
+        if: ${{ matrix.php == '8.3' && matrix.backend == 'dragonfly' }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage-clover
@@ -74,7 +118,7 @@ jobs:
           retention-days: 7
 
       - name: Upload coverage to Codecov
-        if: matrix.php == '8.3'
+        if: ${{ matrix.php == '8.3' && matrix.backend == 'dragonfly' }}
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
@@ -82,6 +126,10 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Stop the engine
+        if: always()
+        run: docker rm -f redis-engine || true
 
   codacy-coverage-reporter:
     name: codacy-coverage-reporter

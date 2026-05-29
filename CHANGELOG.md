@@ -204,6 +204,41 @@ iterator helper that supports both callback and Revolt coroutine modes:
   PHP version), coverage-graph visualizations, and usage sections for every new
   surface.
 
+#### Test infrastructure — subprocess coverage merge + dual-backend
+
+- **Subprocess coverage merge.** Feature tests execute each assertion inside a
+  `proc_open`ed Workerman worker child, so pcov in the parent PHPUnit process
+  never instrumented `src/Client.php` — it reported a false **0.0%**. The worker
+  (`tests/Support/run-in-worker.php`) now collects coverage *inside the child*
+  (gated on a `COVERAGE_DIR` env) and dumps a unique `cov-<uniq>.cov`;
+  `bin/merge-coverage.php` merges every `.cov` (Feature children + the in-process
+  Unit `unit.cov`) into `coverage.xml` (Clover) plus a text summary, and
+  `bin/run-coverage.sh` orchestrates the whole run. `composer test:coverage` now
+  runs `sh bin/run-coverage.sh`. With the merge in place `Client.php` shows its
+  real **~66.5%** (was a misleading 0.0%); total line coverage is **~68.6%**
+  (up from a reported 7.6%).
+- **Dual-backend testing (CI + local).** The full suite now runs against **both
+  Dragonfly and Redis**. CI (`.github/workflows/ci.yml`) gained a
+  `backend: [dragonfly, redis]` matrix axis crossed with `php: [8.1, 8.2, 8.3]`
+  (fail-fast off); each leg starts exactly one engine on `127.0.0.1:6379` — the
+  Dragonfly image, or `redis/redis-stack-server:latest` on the Redis leg so the
+  JSON/Bloom/CMS/TopK/FT modules are present. Coverage is collected on the single
+  `php=8.3 && backend=dragonfly` leg. Locally, `make test-dragonfly` /
+  `make test-redis` / `make test-all` / `make coverage` (plus `scripts/start-redis.sh`
+  and `scripts/start-dragonfly.sh`) drive Dragonfly on `:6379` and Redis on
+  `:63790`.
+- **Coverage floor gate.** `bin/merge-coverage.php` accepts `--min=<pct>` /
+  `COVERAGE_MIN` and exits non-zero (code 3) below the floor. Initial floor is
+  **65** (set in `bin/run-coverage.sh`, overridable via `COVERAGE_MIN`), to be
+  ratcheted toward 95 in later groups. This is the canonical gate — CI fails below it.
+- **Backend-aware skip helpers.** Free functions `currentBackend()` and
+  `skipOnBackend($backend, $reason)` in `tests/Pest.php` (and `runInWorker()`
+  forwarding `REDIS_BACKEND` to the child) let an engine-specific case skip *with
+  a logged reason* — every skip prints `[<backend>] <reason>`; no silent skips.
+  Current results: Dragonfly **201 passed / 0 skipped**; Redis **196 passed /
+  5 skipped** (the 5 are the RediSearch FT family in `tests/Feature/FtSearchTest.php`
+  — see *Compatibility* in the README).
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was

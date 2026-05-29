@@ -56,18 +56,83 @@ Worker::$daemonize = false;
 
 $emitted = false;
 
+// ---------------------------------------------------------------------------
+// Optional code coverage. When COVERAGE_DIR is set we instrument the project
+// src/ directory *inside this child process* (pcov runs here, not in the parent
+// PHPUnit process) and dump a .cov report right before the process exits. The
+// parent then merges every cov-<uniq>.cov file.
+//
+// IMPORTANT: coverage must be STARTED inside onWorkerStart, i.e. inside the
+// forked Workerman worker process that actually eval()s the snippet — not here
+// at the top level (master). Workerman forks before running onWorkerStart, and
+// pcov counters live per-process, so a session started in the master records
+// nothing for code that executes in the forked child.
+//
+// A coverage failure must never disturb the fd-3 result protocol, so every step
+// is wrapped in try/catch.
+// ---------------------------------------------------------------------------
+$coverageDir = getenv('COVERAGE_DIR');
+$coverageEnabled = is_string($coverageDir) && $coverageDir !== '';
+$coverage = null;
+
+// Start coverage in the current (worker) process. Call once at the top of
+// onWorkerStart. Never throws.
+$startCoverage = function () use (&$coverage, $coverageEnabled, $uniq) {
+    if (!$coverageEnabled) {
+        return;
+    }
+    try {
+        require_once __DIR__ . '/coverage-filter.php';
+        $filter = new \SebastianBergmann\CodeCoverage\Filter();
+        $filter->includeFiles(workerman_redis_src_files());
+        $driver = (new \SebastianBergmann\CodeCoverage\Driver\Selector())->forLineCoverage($filter);
+        $coverage = new \SebastianBergmann\CodeCoverage\CodeCoverage($driver, $filter);
+        $coverage->start('worker-' . $uniq);
+    } catch (\Throwable $e) {
+        // Coverage is best-effort; carry on without it.
+        $coverage = null;
+        fwrite(STDERR, "coverage start failed: {$e->getMessage()}\n");
+    }
+};
+
+// Stop coverage (if active) and write a unique .cov file. Safe to call more than
+// once; only the first call does real work. Never throws.
+$dumpCoverage = function () use (&$coverage, $coverageDir, $uniq) {
+    if ($coverage === null) {
+        return;
+    }
+    $cov = $coverage;
+    $coverage = null;
+    try {
+        $cov->stop();
+        if (!is_dir((string) $coverageDir)) {
+            @mkdir((string) $coverageDir, 0777, true);
+        }
+        $target = rtrim((string) $coverageDir, '/') . "/cov-{$uniq}.cov";
+        (new \SebastianBergmann\CodeCoverage\Report\PHP())->process($cov, $target);
+    } catch (\Throwable $e) {
+        fwrite(STDERR, "coverage dump failed: {$e->getMessage()}\n");
+    }
+};
+
 $worker = new Worker();
 $worker->count = 1;
-$worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, $resultFd, &$emitted) {
+$worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, $resultFd, &$emitted, $startCoverage, $dumpCoverage) {
+    // Start coverage in THIS (forked) worker process, before any client/src
+    // code runs, so pcov records the lines the snippet executes.
+    $startCoverage();
+
     $redis = new Client($redisUrl);
 
-    $emit = function ($value) use (&$emitted, $resultFd) {
+    $emit = function ($value) use (&$emitted, $resultFd, $dumpCoverage) {
         if ($emitted) {
             return;
         }
         $emitted = true;
         fwrite($resultFd, 'OK ' . json_encode($value, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) . "\n");
         fflush($resultFd);
+        // Dump coverage before tearing down so the .cov is flushed to disk.
+        $dumpCoverage();
         // Signal the master AND exit — stopAll() alone leaves the master
         // monitoring a child it will immediately try to respawn, leading
         // to a tight emit loop. SIGTERM to the parent (master) followed
@@ -79,13 +144,14 @@ $worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, 
         exit(0);
     };
 
-    $fail = function ($msg) use (&$emitted, $resultFd) {
+    $fail = function ($msg) use (&$emitted, $resultFd, $dumpCoverage) {
         if ($emitted) {
             return;
         }
         $emitted = true;
         fwrite($resultFd, 'FAIL ' . $msg . "\n");
         fflush($resultFd);
+        $dumpCoverage();
         $ppid = posix_getppid();
         if ($ppid > 1) {
             posix_kill($ppid, SIGTERM);

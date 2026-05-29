@@ -14,6 +14,7 @@ coverage.xml
 coverage.cobertura.xml
 clover.xml
 .phpunit.coverage/
+/build/
 .caliber/
 async_plan.md
 redis_start_prompt.md

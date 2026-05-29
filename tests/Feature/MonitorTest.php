@@ -19,7 +19,7 @@
 it('monitor streams commands issued by another client', function () {
 
     $result = runInWorker(<<<'PHP'
-        $other = new Workerman\Redis\Client('redis://127.0.0.1:6379');
+        $other = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
         $seen = [];
         $redis->monitor(function ($line, $client) use ($emit, &$seen) {
             if (strpos($line, 'pest:monitor:t1:') !== false) {
@@ -53,7 +53,7 @@ it('monitor swallows the OK handshake and only forwards command lines', function
     // first thing the callback sees that mentions our marker; it must be the
     // SET line, never `true`/`1`/empty.
     $result = runInWorker(<<<'PHP'
-        $other = new Workerman\Redis\Client('redis://127.0.0.1:6379');
+        $other = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
         $redis->monitor(function ($line, $client) use ($emit) {
             if (strpos($line, 'pest:monitor:t2:marker') !== false) {
                 $emit($line);

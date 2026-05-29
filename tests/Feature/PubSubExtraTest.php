@@ -32,8 +32,8 @@ it('sPublish returns the subscriber count when nobody is listening', function ()
 it('sSubscribe receives a message published via sPublish', function () {
 
     $result = runInWorker(<<<'PHP'
-        $sub = new Workerman\Redis\Client('redis://127.0.0.1:6379');
-        $pub = new Workerman\Redis\Client('redis://127.0.0.1:6379');
+        $sub = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
+        $pub = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
         $sub->sSubscribe(['pest:ps:t2:chan'], function ($channel, $message, $client) use ($emit) {
             $emit(['channel' => $channel, 'message' => $message]);
         });
@@ -51,7 +51,7 @@ it('sSubscribe receives a message published via sPublish', function () {
 it('pubSub CHANNELS returns active channels matching a pattern', function () {
 
     $result = runInWorker(<<<'PHP'
-        $sub = new Workerman\Redis\Client('redis://127.0.0.1:6379');
+        $sub = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
         $sub->subscribe(['pest:ps:t3:chan-a'], function ($ch, $msg) {});
         \Workerman\Timer::add(0.2, function () use ($redis, $emit) {
             $redis->pubSub('CHANNELS', 'pest:ps:t3:*', function ($channels) use ($emit) {

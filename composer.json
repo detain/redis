@@ -41,6 +41,6 @@
     "scripts": {
         "analyze": "php -d memory_limit=1G vendor/bin/phpstan analyse",
         "test": "pest --colors=always",
-        "test:coverage": "pest --colors=always --coverage --min=70"
+        "test:coverage": "sh bin/run-coverage.sh"
     }
 }
