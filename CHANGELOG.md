@@ -307,6 +307,23 @@ iterator helper that supports both callback and Revolt coroutine modes:
   (`OBJECT` is unknown on Dragonfly; the test runs on Redis). `Client.php` merged
   **70.4% → 72.95%**; total merged **73.0% → 75.34%**.
 
+#### Module command coverage + FT un-gating — Feature tests
+
+- Added `tests/Feature/FtModuleTest.php` (5 cases) for the six RediSearch verbs
+  not previously asserted: `ftAlter`, `ftConfig`, `ftTagVals`, `ftSynUpdate` +
+  `ftSynDump` (synonym round-trip), and `ftProfile` (asserts the embedded search
+  result). The JSON/Bloom/CMS/TopK families were already fully covered at the
+  shortcut level (`JsonTest`/`BloomFilterTest`/`CmsTest`/`TopkTest`) — not
+  duplicated.
+- **Removed the 5 stale `skipOnBackend('redis', …)` gates in
+  `tests/Feature/FtSearchTest.php`.** They were defending against an
+  FT.SEARCH `SEARCH_INDEX_NOT_FOUND` divergence on an earlier Redis build that no
+  longer reproduces on Redis 8.8 + RediSearch 80800 — verified that FT.CREATE /
+  SEARCH / AGGREGATE / INFO / CONFIG all work, and confirmed stable across three
+  consecutive `make test-redis` runs. The FT family is now exercised on **both**
+  engines, and the **Redis leg has zero skips** (was 5).
+  `Client.php` merged **72.95% → 75.26%**; total merged **75.34% → 77.45%**.
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was

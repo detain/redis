@@ -5,30 +5,28 @@
 | Tier 9 — RedisSearch (FT) module
 |--------------------------------------------------------------------------
 |
-| Dragonfly ships a `search` module that implements the FT.* command set.
-| These tests exercise the ft() dispatcher and the typed shortcuts
-| (ftCreate, ftSearch, ftAggregate, ftDropIndex, ftInfo, ftList) added to
-| Client.php.
+| Both engines ship a `search` module implementing the FT.* command set:
+| Dragonfly's built-in search, and RediSearch on the Redis 8.8 build. These
+| tests exercise the ft() dispatcher and the typed shortcuts (ftCreate,
+| ftSearch, ftAggregate, ftDropIndex, ftInfo, ftList) added to Client.php and
+| run on BOTH engines.
 |
 | Each test owns a unique index name (pest:ft:tN:idx) and a unique
 | document prefix (pest:ft:tN:doc:) so concurrent runs don't trip on each
 | other. Indexes are torn down at the end of each test via ftDropIndex().
 |
 | The tests assert on reply *shapes* rather than exact byte sequences:
-| reply formats vary across Dragonfly versions and we want the suite to
-| stay green as the module evolves.
+| reply formats vary across engines/versions and we want the suite to stay
+| green as the modules evolve.
+|
+| (Historical note: these carried skipOnBackend('redis', ...) gates for an
+| FT.SEARCH "SEARCH_INDEX_NOT_FOUND" divergence on an earlier Redis build.
+| That no longer reproduces on Redis 8.8 + RediSearch 80800 — verified that
+| FT.CREATE/SEARCH/AGGREGATE/INFO/CONFIG all work — so the gates were removed
+| and the FT family is now covered on both engines.)
 */
 
 it('ftCreate then ftSearch returns matching documents', function () {
-
-    // Engine divergence (server-side, reproducible with raw redis-cli): on this
-    // stock Redis 8.8 + RediSearch 80800 build, FT.CREATE returns +OK and the
-    // index appears in FT._LIST, but FT.SEARCH against it replies
-    // "-SEARCH_INDEX_NOT_FOUND Index not found" — the index is listed but not
-    // queryable (this build also lacks FT.CONFIG). Dragonfly's search module
-    // returns the expected hit array. Not a client bug; gated with a logged
-    // reason rather than failing the suite.
-    skipOnBackend('redis', 'FT.SEARCH replies SEARCH_INDEX_NOT_FOUND on this Redis/RediSearch build even though FT.CREATE succeeded and FT._LIST shows the index (server-side divergence, reproducible via raw redis-cli)');
 
     $result = runInWorker(<<<'PHP'
         $idx = 'pest:ft:t1:idx';
@@ -72,12 +70,6 @@ it('ftCreate then ftSearch returns matching documents', function () {
 
 it('ftList returns the list of defined indexes', function () {
 
-    // Gated on Redis: this RediSearch build's index lifecycle is unreliable for
-    // the test suite (FT.CREATE'd indexes are not queryable; FT.DROPINDEX +
-    // FT._LIST round-trips race), so the FT.* family is exercised only on
-    // Dragonfly here. See the ftSearch test above for the root cause.
-    skipOnBackend('redis', 'RediSearch index lifecycle (FT.CREATE/FT._LIST/FT.DROPINDEX) is unreliable on this Redis build — FT indexes are listed but not queryable; FT family covered on Dragonfly');
-
     $result = runInWorker(<<<'PHP'
         $idx = 'pest:ft:t2:idx';
         $redis->rawCommand('FT.DROPINDEX', $idx, function () use ($redis, $emit, $idx) {
@@ -102,11 +94,6 @@ it('ftList returns the list of defined indexes', function () {
 });
 
 it('ftInfo returns metadata for an index', function () {
-
-    // Gated on Redis: see the ftSearch test — this RediSearch build's indexes
-    // are listed but not fully usable, making FT.INFO unreliable here. The FT
-    // family is exercised on Dragonfly.
-    skipOnBackend('redis', 'RediSearch index lifecycle is unreliable on this Redis build (indexes listed but not queryable); FT.INFO covered on Dragonfly');
 
     $result = runInWorker(<<<'PHP'
         $idx = 'pest:ft:t3:idx';
@@ -135,11 +122,6 @@ it('ftInfo returns metadata for an index', function () {
 
 it('ftDropIndex removes an index from ftList', function () {
 
-    // Gated on Redis: see the ftSearch test — this RediSearch build's
-    // FT.CREATE/FT.DROPINDEX/FT._LIST round-trips are unreliable (indexes
-    // listed but not queryable). The FT family is exercised on Dragonfly.
-    skipOnBackend('redis', 'RediSearch index lifecycle (FT.CREATE/FT.DROPINDEX/FT._LIST) is unreliable on this Redis build; FT.DROPINDEX covered on Dragonfly');
-
     $result = runInWorker(<<<'PHP'
         $idx = 'pest:ft:t4:idx';
         $redis->rawCommand('FT.DROPINDEX', $idx, function () use ($redis, $emit, $idx) {
@@ -167,12 +149,6 @@ it('ftDropIndex removes an index from ftList', function () {
 });
 
 it('ftAggregate runs a basic GROUPBY aggregation', function () {
-
-    // Engine divergence (same root cause as the ftSearch test above): on this
-    // Redis/RediSearch build the FT.CREATE'd index is not queryable, so
-    // FT.AGGREGATE cannot see the documents. Reproducible via raw redis-cli.
-    // Not a client bug; gated with a logged reason. Covered on Dragonfly.
-    skipOnBackend('redis', 'FT.AGGREGATE sees no documents on this Redis/RediSearch build because the FT.CREATE index is not queryable (SEARCH_INDEX_NOT_FOUND), reproducible via raw redis-cli; covered on Dragonfly');
 
     $result = runInWorker(<<<'PHP'
         $idx = 'pest:ft:t5:idx';
