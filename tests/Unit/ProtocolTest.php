@@ -23,311 +23,354 @@ function protocolStubConnection(): \Workerman\Connection\ConnectionInterface
     };
 }
 
-it('encodes a simple flat command into RESP', function () {
-    $wire = Redis::encode(['PING']);
-    expect($wire)->toBe("*1\r\n\$4\r\nPING\r\n");
-});
-
-it('encodes commands with multiple bulk-string args', function () {
-    $wire = Redis::encode(['SET', 'foo', 'bar']);
-    expect($wire)->toBe("*3\r\n\$3\r\nSET\r\n\$3\r\nfoo\r\n\$3\r\nbar\r\n");
-});
-
-it('flattens nested array args (MGET-style)', function () {
-    $wire = Redis::encode(['MGET', ['a', 'b', 'c']]);
-    expect($wire)->toBe("*4\r\n\$4\r\nMGET\r\n\$1\r\na\r\n\$1\r\nb\r\n\$1\r\nc\r\n");
-});
-
-it('decodes a simple-string reply', function () {
-    [$type, $value] = Redis::decode("+OK\r\n");
-    expect($type)->toBe('+');
-    expect($value)->toBe('OK');
-});
-
-it('decodes an integer reply', function () {
-    [$type, $value] = Redis::decode(":42\r\n");
-    expect($type)->toBe(':');
-    expect($value)->toBe(42);
-});
-
-it('decodes a bulk-string reply', function () {
-    [$type, $value] = Redis::decode("\$5\r\nhello\r\n");
-    expect($type)->toBe('$');
-    expect($value)->toBe('hello');
-});
-
-it('decodes a null bulk-string reply', function () {
-    [$type, $value] = Redis::decode("\$-1\r\n");
-    expect($type)->toBe('$');
-    expect($value)->toBeNull();
-});
-
-it('decodes an array reply with mixed types', function () {
-    [$type, $value] = Redis::decode("*3\r\n:1\r\n\$3\r\nfoo\r\n+OK\r\n");
-    expect($type)->toBe('*');
-    expect($value)->toBe([1, 'foo', 'OK']);
-});
-
-it('decodes an error reply', function () {
-    [$type, $value] = Redis::decode("-ERR wrong\r\n");
-    expect($type)->toBe('-');
-    expect($value)->toBe('ERR wrong');
-});
-
-it('decodes a nested-array reply (SCAN shape)', function () {
-    // *2\r\n$1\r\n0\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n
-    $wire = "*2\r\n\$1\r\n0\r\n*2\r\n\$3\r\nfoo\r\n\$3\r\nbar\r\n";
-    [$type, $value] = Redis::decode($wire);
-    expect($type)->toBe('*');
-    expect($value)->toBe(['0', ['foo', 'bar']]);
-});
-
-it('decodes a nested null bulk inside an array (MGET-with-missing-key shape)', function () {
-    // *3\r\n$1\r\na\r\n$-1\r\n$1\r\nb\r\n  — middle element is a nil bulk
-    // at $offset > 0, which used to be missed by the strpos===0 check.
-    $wire = "*3\r\n\$1\r\na\r\n\$-1\r\n\$1\r\nb\r\n";
-    [$type, $value] = Redis::decode($wire);
-    expect($type)->toBe('*');
-    expect($value)->toBe(['a', null, 'b']);
-});
-
-it('decodes a nested null array inside an array', function () {
-    // *2\r\n$1\r\na\r\n*-1\r\n — null multi-bulk as a nested element.
-    $wire = "*2\r\n\$1\r\na\r\n*-1\r\n";
-    [$type, $value] = Redis::decode($wire);
-    expect($type)->toBe('*');
-    expect($value)->toBe(['a', null]);
-});
-
-it('decodes an empty array reply (*0)', function () {
-    // *0\r\n — valid RESP empty multi-bulk.
-    $wire = "*0\r\n";
-    [$type, $value] = Redis::decode($wire);
-    expect($type)->toBe('*');
-    expect($value)->toBe([]);
-});
-
-it('encodes an empty-string element as a zero-length bulk string', function () {
-    // Empty strings are valid RESP bulk strings: $0\r\n\r\n
-    $wire = Redis::encode(['SET', 'key', '']);
-    expect($wire)->toBe("*3\r\n\$3\r\nSET\r\n\$3\r\nkey\r\n\$0\r\n\r\n");
-});
-
-it('decodes a deeply nested array within MAX_DEPTH without error', function () {
-    // Build a 60-deep nested RESP array: *1\r\n ( repeated 59 times ) $3\r\nend\r\n
-    // MAX_DEPTH is 64, so this must succeed and preserve the nesting.
-    $depth = 60;
-    $wire = str_repeat("*1\r\n", $depth) . "\$3\r\nend\r\n";
-
-    [$type, $value] = Redis::decode($wire);
-
-    expect($type)->toBe('*');
-
-    // Unwrap all nesting levels; every level is a single-element array.
-    // There are $depth layers of *1 wrapping the leaf string, so we must
-    // peel exactly $depth times to reach 'end'.
-    $node = $value;
-    for ($i = 0; $i < $depth; $i++) {
-        expect($node)->toBeArray();
-        expect(count($node))->toBe(1);
-        $node = $node[0];
+final class ProtocolTest extends \Tests\TestCase
+{
+    public function test_encodes_a_simple_flat_command_into_resp(): void
+    {
+        $wire = Redis::encode(['PING']);
+        $this->assertSame("*1\r\n\$4\r\nPING\r\n", $wire);
     }
-    expect($node)->toBe('end');
-});
 
-it('decodes an array deeper than MAX_DEPTH as a protocol error', function () {
-    // Build a 70-deep nested RESP array — beyond the MAX_DEPTH of 64.
-    // decodeOne() must propagate the depth-exceeded error upward.
-    $depth = 70;
-    $wire = str_repeat("*1\r\n", $depth) . "\$3\r\nend\r\n";
+    public function test_encodes_commands_with_multiple_bulk_string_args(): void
+    {
+        $wire = Redis::encode(['SET', 'foo', 'bar']);
+        $this->assertSame("*3\r\n\$3\r\nSET\r\n\$3\r\nfoo\r\n\$3\r\nbar\r\n", $wire);
+    }
 
-    [$type, $value] = Redis::decode($wire);
+    public function test_flattens_nested_array_args_mget_style(): void
+    {
+        $wire = Redis::encode(['MGET', ['a', 'b', 'c']]);
+        $this->assertSame("*4\r\n\$4\r\nMGET\r\n\$1\r\na\r\n\$1\r\nb\r\n\$1\r\nc\r\n", $wire);
+    }
 
-    expect($type)->toBe('!');
-    expect($value)->toBe('protocol error: max array depth exceeded');
-});
+    public function test_decodes_a_simple_string_reply(): void
+    {
+        [$type, $value] = Redis::decode("+OK\r\n");
+        $this->assertSame('+', $type);
+        $this->assertSame('OK', $value);
+    }
 
-it('input returns 0 for a truncated nested-array frame', function () {
-    // A valid SCAN reply looks like:
-    //   *2\r\n$1\r\n0\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n
-    // Truncate the last element mid-bulk-string: cut off after "$3\r\nb"
-    // (the second element of the inner array is incomplete).
-    $truncated = "*2\r\n\$1\r\n0\r\n*2\r\n\$3\r\nfoo\r\n\$3\r\nb";
+    public function test_decodes_an_integer_reply(): void
+    {
+        [$type, $value] = Redis::decode(":42\r\n");
+        $this->assertSame(':', $type);
+        $this->assertSame(42, $value);
+    }
 
-    $len = Redis::input($truncated, protocolStubConnection());
+    public function test_decodes_a_bulk_string_reply(): void
+    {
+        [$type, $value] = Redis::decode("\$5\r\nhello\r\n");
+        $this->assertSame('$', $type);
+        $this->assertSame('hello', $value);
+    }
 
-    // 0 means "need more data" — do not advance the read pointer.
-    expect($len)->toBe(0);
-});
+    public function test_decodes_a_null_bulk_string_reply(): void
+    {
+        [$type, $value] = Redis::decode("\$-1\r\n");
+        $this->assertSame('$', $type);
+        $this->assertNull($value);
+    }
 
-/*
-|--------------------------------------------------------------------------
-| input() / measure() frame-length probe
-|--------------------------------------------------------------------------
-|
-| input() returns the byte length of the next complete RESP frame in the
-| buffer, or 0 when more bytes are needed. These exercise every measure()
-| branch — the cheap, server-free wins that close the last ~10% of the
-| protocol class.
-*/
+    public function test_decodes_an_array_reply_with_mixed_types(): void
+    {
+        [$type, $value] = Redis::decode("*3\r\n:1\r\n\$3\r\nfoo\r\n+OK\r\n");
+        $this->assertSame('*', $type);
+        $this->assertSame([1, 'foo', 'OK'], $value);
+    }
 
-it('input sizes a simple-string frame exactly', function () {
-    // '+OK\r\n' is 5 bytes; input() must report the full frame length.
-    expect(Redis::input("+OK\r\n", protocolStubConnection()))->toBe(5);
-});
+    public function test_decodes_an_error_reply(): void
+    {
+        [$type, $value] = Redis::decode("-ERR wrong\r\n");
+        $this->assertSame('-', $type);
+        $this->assertSame('ERR wrong', $value);
+    }
 
-it('input sizes an integer frame exactly', function () {
-    expect(Redis::input(":42\r\n", protocolStubConnection()))->toBe(5);
-});
+    public function test_decodes_a_nested_array_reply_scan_shape(): void
+    {
+        // *2\r\n$1\r\n0\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n
+        $wire = "*2\r\n\$1\r\n0\r\n*2\r\n\$3\r\nfoo\r\n\$3\r\nbar\r\n";
+        [$type, $value] = Redis::decode($wire);
+        $this->assertSame('*', $type);
+        $this->assertSame(['0', ['foo', 'bar']], $value);
+    }
 
-it('input sizes an error frame exactly', function () {
-    // '-ERR x\r\n' is 8 bytes.
-    expect(Redis::input("-ERR x\r\n", protocolStubConnection()))->toBe(8);
-});
+    public function test_decodes_a_nested_null_bulk_inside_an_array_mget_with_missing_key_shape(): void
+    {
+        // *3\r\n$1\r\na\r\n$-1\r\n$1\r\nb\r\n  — middle element is a nil bulk
+        // at $offset > 0, which used to be missed by the strpos===0 check.
+        $wire = "*3\r\n\$1\r\na\r\n\$-1\r\n\$1\r\nb\r\n";
+        [$type, $value] = Redis::decode($wire);
+        $this->assertSame('*', $type);
+        $this->assertSame(['a', null, 'b'], $value);
+    }
 
-it('input sizes a bulk-string frame including the payload and trailing CRLF', function () {
-    // '$5\r\nhello\r\n' is 11 bytes.
-    expect(Redis::input("\$5\r\nhello\r\n", protocolStubConnection()))->toBe(11);
-});
+    public function test_decodes_a_nested_null_array_inside_an_array(): void
+    {
+        // *2\r\n$1\r\na\r\n*-1\r\n — null multi-bulk as a nested element.
+        $wire = "*2\r\n\$1\r\na\r\n*-1\r\n";
+        [$type, $value] = Redis::decode($wire);
+        $this->assertSame('*', $type);
+        $this->assertSame(['a', null], $value);
+    }
 
-it('input sizes a null bulk-string frame as 5 bytes', function () {
-    // '$-1\r\n' — the measure() $-1 fast path returns the literal 5.
-    expect(Redis::input("\$-1\r\n", protocolStubConnection()))->toBe(5);
-});
+    public function test_decodes_an_empty_array_reply_0(): void
+    {
+        // *0\r\n — valid RESP empty multi-bulk.
+        $wire = "*0\r\n";
+        [$type, $value] = Redis::decode($wire);
+        $this->assertSame('*', $type);
+        $this->assertSame([], $value);
+    }
 
-it('input sizes a null multi-bulk frame as 5 bytes', function () {
-    // '*-1\r\n' — the measure() *-1 fast path returns the literal 5.
-    expect(Redis::input("*-1\r\n", protocolStubConnection()))->toBe(5);
-});
+    public function test_encodes_an_empty_string_element_as_a_zero_length_bulk_string(): void
+    {
+        // Empty strings are valid RESP bulk strings: $0\r\n\r\n
+        $wire = Redis::encode(['SET', 'key', '']);
+        $this->assertSame("*3\r\n\$3\r\nSET\r\n\$3\r\nkey\r\n\$0\r\n\r\n", $wire);
+    }
 
-it('input sizes an empty array frame as 4 bytes', function () {
-    expect(Redis::input("*0\r\n", protocolStubConnection()))->toBe(4);
-});
+    public function test_decodes_a_deeply_nested_array_within_max_depth_without_error(): void
+    {
+        // Build a 60-deep nested RESP array: *1\r\n ( repeated 59 times ) $3\r\nend\r\n
+        // MAX_DEPTH is 64, so this must succeed and preserve the nesting.
+        $depth = 60;
+        $wire = str_repeat("*1\r\n", $depth) . "\$3\r\nend\r\n";
 
-it('input sizes a nested multi-bulk (SCAN) frame exactly', function () {
-    // *2\r\n$1\r\n0\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n — sum of all child frames.
-    $wire = "*2\r\n\$1\r\n0\r\n*2\r\n\$3\r\nfoo\r\n\$3\r\nbar\r\n";
-    expect(Redis::input($wire, protocolStubConnection()))->toBe(\strlen($wire));
-});
+        [$type, $value] = Redis::decode($wire);
 
-it('input returns 0 for an empty buffer', function () {
-    // measure() hits the `!isset($buffer[$offset])` guard.
-    expect(Redis::input('', protocolStubConnection()))->toBe(0);
-});
+        $this->assertSame('*', $type);
 
-it('input returns 0 when the first line has no CRLF yet', function () {
-    // measure() finds no "\r\n" and returns 0 (need more bytes).
-    expect(Redis::input("\$5\r\nhel", protocolStubConnection()))->toBe(0);
-});
+        // Unwrap all nesting levels; every level is a single-element array.
+        // There are $depth layers of *1 wrapping the leaf string, so we must
+        // peel exactly $depth times to reach 'end'.
+        $node = $value;
+        for ($i = 0; $i < $depth; $i++) {
+            $this->assertIsArray($node);
+            $this->assertSame(1, count($node));
+            $node = $node[0];
+        }
+        $this->assertSame('end', $node);
+    }
 
-it('input returns 0 for a bulk frame whose payload is not fully buffered', function () {
-    // Header says 5 bytes but only 3 of "hello" are present.
-    expect(Redis::input("\$5\r\nhel", protocolStubConnection()))->toBe(0);
-});
+    public function test_decodes_an_array_deeper_than_max_depth_as_a_protocol_error(): void
+    {
+        // Build a 70-deep nested RESP array — beyond the MAX_DEPTH of 64.
+        // decodeOne() must propagate the depth-exceeded error upward.
+        $depth = 70;
+        $wire = str_repeat("*1\r\n", $depth) . "\$3\r\nend\r\n";
 
-it('input returns 0 when a multi-bulk element header has no CRLF', function () {
-    // Outer header complete, but the single child '$3' has no CRLF — the
-    // recursive measure() call returns 0, so the whole frame is incomplete.
-    expect(Redis::input("*1\r\n\$3", protocolStubConnection()))->toBe(0);
-});
+        [$type, $value] = Redis::decode($wire);
 
-it('input bails out with the buffer-length sentinel past MAX_DEPTH', function () {
-    // measure() recurses one level per nested '*1'. Beyond MAX_DEPTH (64) it
-    // stops descending and returns strlen-offset so input() treats the frame
-    // as consumed and the decoder produces the depth-exceeded protocol error.
-    // 70 levels > 64, so the sentinel branch (Redis.php line 62) fires.
-    $wire = str_repeat("*1\r\n", 70) . "\$3\r\nend\r\n";
-    $len = Redis::input($wire, protocolStubConnection());
-    // The depth-65 sentinel (strlen-offset) propagates up through the
-    // $cursor accumulation to sum to the full buffer length, so the frame is
-    // treated as complete and consumed in one shot.
-    expect($len)->toBe(\strlen($wire));
-});
+        $this->assertSame('!', $type);
+        $this->assertSame('protocol error: max array depth exceeded', $value);
+    }
 
-it('input treats an unknown leading type byte as a consumed (error) frame', function () {
-    // measure() default branch returns strlen-offset so input() reports the
-    // whole buffer as one frame; decode() then surfaces the protocol error.
-    $buffer = "?bogus\r\n";
-    expect(Redis::input($buffer, protocolStubConnection()))->toBe(\strlen($buffer));
-});
+    public function test_input_returns_0_for_a_truncated_nested_array_frame(): void
+    {
+        // A valid SCAN reply looks like:
+        //   *2\r\n$1\r\n0\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n
+        // Truncate the last element mid-bulk-string: cut off after "$3\r\nb"
+        // (the second element of the inner array is incomplete).
+        $truncated = "*2\r\n\$1\r\n0\r\n*2\r\n\$3\r\nfoo\r\n\$3\r\nb";
 
-/*
-|--------------------------------------------------------------------------
-| decode() / decodeOne() error & incomplete branches
-|--------------------------------------------------------------------------
-*/
+        $len = Redis::input($truncated, protocolStubConnection());
 
-it('decodes a binary-safe bulk string containing an embedded CRLF', function () {
-    // The $length header makes the payload binary-safe — an embedded \r\n
-    // must NOT terminate the value early.
-    $payload = "ab\r\ncd";                       // 6 bytes incl. the CRLF
-    $wire = '$' . \strlen($payload) . "\r\n" . $payload . "\r\n";
-    [$type, $value] = Redis::decode($wire);
-    expect($type)->toBe('$');
-    expect($value)->toBe($payload);
-});
+        // 0 means "need more data" — do not advance the read pointer.
+        $this->assertSame(0, $len);
+    }
 
-it('decodes a bulk string containing a null byte', function () {
-    $payload = "a\0b";
-    $wire = '$' . \strlen($payload) . "\r\n" . $payload . "\r\n";
-    [$type, $value] = Redis::decode($wire);
-    expect($type)->toBe('$');
-    expect($value)->toBe($payload);
-});
+    /*
+    |--------------------------------------------------------------------------
+    | input() / measure() frame-length probe
+    |--------------------------------------------------------------------------
+    |
+    | input() returns the byte length of the next complete RESP frame in the
+    | buffer, or 0 when more bytes are needed. These exercise every measure()
+    | branch — the cheap, server-free wins that close the last ~10% of the
+    | protocol class.
+    */
 
-it('decodes a large bulk string (multi-KB) intact', function () {
-    $payload = str_repeat('x', 4096);
-    $wire = '$' . \strlen($payload) . "\r\n" . $payload . "\r\n";
-    [$type, $value] = Redis::decode($wire);
-    expect($type)->toBe('$');
-    expect($value)->toBe($payload);
-});
+    public function test_input_sizes_a_simple_string_frame_exactly(): void
+    {
+        // '+OK\r\n' is 5 bytes; input() must report the full frame length.
+        $this->assertSame(5, Redis::input("+OK\r\n", protocolStubConnection()));
+    }
 
-it('decodes a negative integer reply', function () {
-    [$type, $value] = Redis::decode(":-7\r\n");
-    expect($type)->toBe(':');
-    expect($value)->toBe(-7);
-});
+    public function test_input_sizes_an_integer_frame_exactly(): void
+    {
+        $this->assertSame(5, Redis::input(":42\r\n", protocolStubConnection()));
+    }
 
-it('returns a protocol-error tuple for an unknown leading type byte', function () {
-    // decodeOne()'s default branch returns null → decode() builds the '!' tuple
-    // with the offending byte and a hex dump of the buffer.
-    [$type, $value] = Redis::decode("?nope\r\n");
-    expect($type)->toBe('!');
-    expect($value)->toContain("got '?'");
-    expect($value)->toContain(bin2hex("?nope\r\n"));
-});
+    public function test_input_sizes_an_error_frame_exactly(): void
+    {
+        // '-ERR x\r\n' is 8 bytes.
+        $this->assertSame(8, Redis::input("-ERR x\r\n", protocolStubConnection()));
+    }
 
-it('returns a protocol-error tuple for an empty buffer', function () {
-    // decodeOne() hits `!isset($buffer[$offset])` → null → decode() reports
-    // an empty offending byte.
-    [$type, $value] = Redis::decode('');
-    expect($type)->toBe('!');
-    expect($value)->toContain("got ''");
-});
+    public function test_input_sizes_a_bulk_string_frame_including_the_payload_and_trailing_crlf(): void
+    {
+        // '$5\r\nhello\r\n' is 11 bytes.
+        $this->assertSame(11, Redis::input("\$5\r\nhello\r\n", protocolStubConnection()));
+    }
 
-it('returns null-shaped protocol error when the frame has no CRLF', function () {
-    // decodeOne() finds no "\r\n" → null → decode() wraps it as a '!' tuple.
-    [$type, $value] = Redis::decode("+partial");
-    expect($type)->toBe('!');
-});
+    public function test_input_sizes_a_null_bulk_string_frame_as_5_bytes(): void
+    {
+        // '$-1\r\n' — the measure() $-1 fast path returns the literal 5.
+        $this->assertSame(5, Redis::input("\$-1\r\n", protocolStubConnection()));
+    }
 
-it('propagates a depth-exceeded error from a nested element', function () {
-    // An array whose single child blows MAX_DEPTH: the inner decodeOne returns
-    // the '!' depth error, which the parent loop propagates instead of nesting.
-    $depth = 70;
-    $wire = str_repeat("*1\r\n", $depth) . "\$3\r\nend\r\n";
-    [$type, $value] = Redis::decode($wire);
-    expect($type)->toBe('!');
-    expect($value)->toBe('protocol error: max array depth exceeded');
-});
+    public function test_input_sizes_a_null_multi_bulk_frame_as_5_bytes(): void
+    {
+        // '*-1\r\n' — the measure() *-1 fast path returns the literal 5.
+        $this->assertSame(5, Redis::input("*-1\r\n", protocolStubConnection()));
+    }
 
-it('returns a protocol error when a nested array element has no CRLF', function () {
-    // Outer *2 promises two children; the first decodes, but the second
-    // ('+ab' with no trailing CRLF) makes decodeOne return null, which the
-    // parent loop propagates → decode() surfaces a '!' protocol-error tuple.
-    // (A truncated *bulk* would NOT hit this: decodeOne's $ branch substr()s
-    // optimistically, trusting input() to have gated completeness first.)
-    [$type] = Redis::decode("*2\r\n:1\r\n+ab");
-    expect($type)->toBe('!');
-});
+    public function test_input_sizes_an_empty_array_frame_as_4_bytes(): void
+    {
+        $this->assertSame(4, Redis::input("*0\r\n", protocolStubConnection()));
+    }
+
+    public function test_input_sizes_a_nested_multi_bulk_scan_frame_exactly(): void
+    {
+        // *2\r\n$1\r\n0\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n — sum of all child frames.
+        $wire = "*2\r\n\$1\r\n0\r\n*2\r\n\$3\r\nfoo\r\n\$3\r\nbar\r\n";
+        $this->assertSame(\strlen($wire), Redis::input($wire, protocolStubConnection()));
+    }
+
+    public function test_input_returns_0_for_an_empty_buffer(): void
+    {
+        // measure() hits the `!isset($buffer[$offset])` guard.
+        $this->assertSame(0, Redis::input('', protocolStubConnection()));
+    }
+
+    public function test_input_returns_0_when_the_first_line_has_no_crlf_yet(): void
+    {
+        // measure() finds no "\r\n" and returns 0 (need more bytes).
+        $this->assertSame(0, Redis::input("\$5\r\nhel", protocolStubConnection()));
+    }
+
+    public function test_input_returns_0_for_a_bulk_frame_whose_payload_is_not_fully_buffered(): void
+    {
+        // Header says 5 bytes but only 3 of "hello" are present.
+        $this->assertSame(0, Redis::input("\$5\r\nhel", protocolStubConnection()));
+    }
+
+    public function test_input_returns_0_when_a_multi_bulk_element_header_has_no_crlf(): void
+    {
+        // Outer header complete, but the single child '$3' has no CRLF — the
+        // recursive measure() call returns 0, so the whole frame is incomplete.
+        $this->assertSame(0, Redis::input("*1\r\n\$3", protocolStubConnection()));
+    }
+
+    public function test_input_bails_out_with_the_buffer_length_sentinel_past_max_depth(): void
+    {
+        // measure() recurses one level per nested '*1'. Beyond MAX_DEPTH (64) it
+        // stops descending and returns strlen-offset so input() treats the frame
+        // as consumed and the decoder produces the depth-exceeded protocol error.
+        // 70 levels > 64, so the sentinel branch (Redis.php line 62) fires.
+        $wire = str_repeat("*1\r\n", 70) . "\$3\r\nend\r\n";
+        $len = Redis::input($wire, protocolStubConnection());
+        // The depth-65 sentinel (strlen-offset) propagates up through the
+        // $cursor accumulation to sum to the full buffer length, so the frame is
+        // treated as complete and consumed in one shot.
+        $this->assertSame(\strlen($wire), $len);
+    }
+
+    public function test_input_treats_an_unknown_leading_type_byte_as_a_consumed_error_frame(): void
+    {
+        // measure() default branch returns strlen-offset so input() reports the
+        // whole buffer as one frame; decode() then surfaces the protocol error.
+        $buffer = "?bogus\r\n";
+        $this->assertSame(\strlen($buffer), Redis::input($buffer, protocolStubConnection()));
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | decode() / decodeOne() error & incomplete branches
+    |--------------------------------------------------------------------------
+    */
+
+    public function test_decodes_a_binary_safe_bulk_string_containing_an_embedded_crlf(): void
+    {
+        // The $length header makes the payload binary-safe — an embedded \r\n
+        // must NOT terminate the value early.
+        $payload = "ab\r\ncd";                       // 6 bytes incl. the CRLF
+        $wire = '$' . \strlen($payload) . "\r\n" . $payload . "\r\n";
+        [$type, $value] = Redis::decode($wire);
+        $this->assertSame('$', $type);
+        $this->assertSame($payload, $value);
+    }
+
+    public function test_decodes_a_bulk_string_containing_a_null_byte(): void
+    {
+        $payload = "a\0b";
+        $wire = '$' . \strlen($payload) . "\r\n" . $payload . "\r\n";
+        [$type, $value] = Redis::decode($wire);
+        $this->assertSame('$', $type);
+        $this->assertSame($payload, $value);
+    }
+
+    public function test_decodes_a_large_bulk_string_multi_kb_intact(): void
+    {
+        $payload = str_repeat('x', 4096);
+        $wire = '$' . \strlen($payload) . "\r\n" . $payload . "\r\n";
+        [$type, $value] = Redis::decode($wire);
+        $this->assertSame('$', $type);
+        $this->assertSame($payload, $value);
+    }
+
+    public function test_decodes_a_negative_integer_reply(): void
+    {
+        [$type, $value] = Redis::decode(":-7\r\n");
+        $this->assertSame(':', $type);
+        $this->assertSame(-7, $value);
+    }
+
+    public function test_returns_a_protocol_error_tuple_for_an_unknown_leading_type_byte(): void
+    {
+        // decodeOne()'s default branch returns null → decode() builds the '!' tuple
+        // with the offending byte and a hex dump of the buffer.
+        [$type, $value] = Redis::decode("?nope\r\n");
+        $this->assertSame('!', $type);
+        $this->assertStringContainsString("got '?'", $value);
+        $this->assertStringContainsString(bin2hex("?nope\r\n"), $value);
+    }
+
+    public function test_returns_a_protocol_error_tuple_for_an_empty_buffer(): void
+    {
+        // decodeOne() hits `!isset($buffer[$offset])` → null → decode() reports
+        // an empty offending byte.
+        [$type, $value] = Redis::decode('');
+        $this->assertSame('!', $type);
+        $this->assertStringContainsString("got ''", $value);
+    }
+
+    public function test_returns_null_shaped_protocol_error_when_the_frame_has_no_crlf(): void
+    {
+        // decodeOne() finds no "\r\n" → null → decode() wraps it as a '!' tuple.
+        [$type, $value] = Redis::decode("+partial");
+        $this->assertSame('!', $type);
+    }
+
+    public function test_propagates_a_depth_exceeded_error_from_a_nested_element(): void
+    {
+        // An array whose single child blows MAX_DEPTH: the inner decodeOne returns
+        // the '!' depth error, which the parent loop propagates instead of nesting.
+        $depth = 70;
+        $wire = str_repeat("*1\r\n", $depth) . "\$3\r\nend\r\n";
+        [$type, $value] = Redis::decode($wire);
+        $this->assertSame('!', $type);
+        $this->assertSame('protocol error: max array depth exceeded', $value);
+    }
+
+    public function test_returns_a_protocol_error_when_a_nested_array_element_has_no_crlf(): void
+    {
+        // Outer *2 promises two children; the first decodes, but the second
+        // ('+ab' with no trailing CRLF) makes decodeOne return null, which the
+        // parent loop propagates → decode() surfaces a '!' protocol-error tuple.
+        // (A truncated *bulk* would NOT hit this: decodeOne's $ branch substr()s
+        // optimistically, trusting input() to have gated completeness first.)
+        [$type] = Redis::decode("*2\r\n:1\r\n+ab");
+        $this->assertSame('!', $type);
+    }
+}

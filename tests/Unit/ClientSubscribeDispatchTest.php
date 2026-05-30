@@ -81,187 +81,199 @@ function captureEcho(callable $fn): string
     return $out === false ? '' : $out;
 }
 
-// ---------------------------------------------------------------------------
-// the `!$result` error-guard arm (echo $this->error(); return;)
-// ---------------------------------------------------------------------------
+final class ClientSubscribeDispatchTest extends \Tests\TestCase
+{
+    // -----------------------------------------------------------------------
+    // the `!$result` error-guard arm (echo $this->error(); return;)
+    // -----------------------------------------------------------------------
 
-it('subscribe wrapper echoes the stored error and bails when handed a falsey result', function () {
-    $client = subClient();
-    $userCalled = false;
-    $client->subscribe('chan', function () use (&$userCalled) {
-        $userCalled = true;
-    });
-    subSet($client, '_error', 'boom-subscribe');
-    $wrapper = subWrapper($client);
+    public function test_subscribe_wrapper_echoes_the_stored_error_and_bails_when_handed_a_falsey_result(): void
+    {
+        $client = subClient();
+        $userCalled = false;
+        $client->subscribe('chan', function () use (&$userCalled) {
+            $userCalled = true;
+        });
+        subSet($client, '_error', 'boom-subscribe');
+        $wrapper = subWrapper($client);
 
-    $out = captureEcho(fn () => $wrapper(false));
+        $out = captureEcho(fn () => $wrapper(false));
 
-    expect($out)->toBe('boom-subscribe');
-    expect($userCalled)->toBeFalse();
-});
+        $this->assertSame('boom-subscribe', $out);
+        $this->assertFalse($userCalled);
+    }
 
-it('pSubscribe wrapper echoes the stored error and bails when handed a falsey result', function () {
-    $client = subClient();
-    $userCalled = false;
-    $client->pSubscribe('p*', function () use (&$userCalled) {
-        $userCalled = true;
-    });
-    subSet($client, '_error', 'boom-psub');
-    $wrapper = subWrapper($client);
+    public function test_psubscribe_wrapper_echoes_the_stored_error_and_bails_when_handed_a_falsey_result(): void
+    {
+        $client = subClient();
+        $userCalled = false;
+        $client->pSubscribe('p*', function () use (&$userCalled) {
+            $userCalled = true;
+        });
+        subSet($client, '_error', 'boom-psub');
+        $wrapper = subWrapper($client);
 
-    $out = captureEcho(fn () => $wrapper(false));
+        $out = captureEcho(fn () => $wrapper(false));
 
-    expect($out)->toBe('boom-psub');
-    expect($userCalled)->toBeFalse();
-});
+        $this->assertSame('boom-psub', $out);
+        $this->assertFalse($userCalled);
+    }
 
-it('sSubscribe wrapper echoes the stored error and bails when handed a falsey result', function () {
-    $client = subClient();
-    $userCalled = false;
-    $client->sSubscribe('chan', function () use (&$userCalled) {
-        $userCalled = true;
-    });
-    subSet($client, '_error', 'boom-ssub');
-    $wrapper = subWrapper($client);
+    public function test_ssubscribe_wrapper_echoes_the_stored_error_and_bails_when_handed_a_falsey_result(): void
+    {
+        $client = subClient();
+        $userCalled = false;
+        $client->sSubscribe('chan', function () use (&$userCalled) {
+            $userCalled = true;
+        });
+        subSet($client, '_error', 'boom-ssub');
+        $wrapper = subWrapper($client);
 
-    $out = captureEcho(fn () => $wrapper(false));
+        $out = captureEcho(fn () => $wrapper(false));
 
-    expect($out)->toBe('boom-ssub');
-    expect($userCalled)->toBeFalse();
-});
+        $this->assertSame('boom-ssub', $out);
+        $this->assertFalse($userCalled);
+    }
 
-// ---------------------------------------------------------------------------
-// the message / pmessage / smessage delivery arms
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // the message / pmessage / smessage delivery arms
+    // -----------------------------------------------------------------------
 
-it('subscribe wrapper forwards a message frame as (channel, payload, client)', function () {
-    $client = subClient();
-    $seen = null;
-    $client->subscribe('chan', function ($channel, $payload, $c) use (&$seen) {
-        $seen = [$channel, $payload, $c];
-    });
-    $wrapper = subWrapper($client);
+    public function test_subscribe_wrapper_forwards_a_message_frame_as_channel_payload_client(): void
+    {
+        $client = subClient();
+        $seen = null;
+        $client->subscribe('chan', function ($channel, $payload, $c) use (&$seen) {
+            $seen = [$channel, $payload, $c];
+        });
+        $wrapper = subWrapper($client);
 
-    $wrapper(['message', 'chan', 'hello']);
+        $wrapper(['message', 'chan', 'hello']);
 
-    expect($seen[0])->toBe('chan');
-    expect($seen[1])->toBe('hello');
-    expect($seen[2])->toBe($client);
-});
+        $this->assertSame('chan', $seen[0]);
+        $this->assertSame('hello', $seen[1]);
+        $this->assertSame($client, $seen[2]);
+    }
 
-it('pSubscribe wrapper forwards a pmessage frame as (pattern, channel, payload, client)', function () {
-    $client = subClient();
-    $seen = null;
-    $client->pSubscribe('p*', function ($pattern, $channel, $payload, $c) use (&$seen) {
-        $seen = [$pattern, $channel, $payload, $c];
-    });
-    $wrapper = subWrapper($client);
+    public function test_psubscribe_wrapper_forwards_a_pmessage_frame_as_pattern_channel_payload_client(): void
+    {
+        $client = subClient();
+        $seen = null;
+        $client->pSubscribe('p*', function ($pattern, $channel, $payload, $c) use (&$seen) {
+            $seen = [$pattern, $channel, $payload, $c];
+        });
+        $wrapper = subWrapper($client);
 
-    $wrapper(['pmessage', 'p*', 'pchan', 'pay']);
+        $wrapper(['pmessage', 'p*', 'pchan', 'pay']);
 
-    expect($seen[0])->toBe('p*');
-    expect($seen[1])->toBe('pchan');
-    expect($seen[2])->toBe('pay');
-    expect($seen[3])->toBe($client);
-});
+        $this->assertSame('p*', $seen[0]);
+        $this->assertSame('pchan', $seen[1]);
+        $this->assertSame('pay', $seen[2]);
+        $this->assertSame($client, $seen[3]);
+    }
 
-it('sSubscribe wrapper forwards an smessage frame as (channel, payload, client)', function () {
-    $client = subClient();
-    $seen = null;
-    $client->sSubscribe('chan', function ($channel, $payload, $c) use (&$seen) {
-        $seen = [$channel, $payload, $c];
-    });
-    $wrapper = subWrapper($client);
+    public function test_ssubscribe_wrapper_forwards_an_smessage_frame_as_channel_payload_client(): void
+    {
+        $client = subClient();
+        $seen = null;
+        $client->sSubscribe('chan', function ($channel, $payload, $c) use (&$seen) {
+            $seen = [$channel, $payload, $c];
+        });
+        $wrapper = subWrapper($client);
 
-    $wrapper(['smessage', 'chan', 'shello']);
+        $wrapper(['smessage', 'chan', 'shello']);
 
-    expect($seen[0])->toBe('chan');
-    expect($seen[1])->toBe('shello');
-    expect($seen[2])->toBe($client);
-});
+        $this->assertSame('chan', $seen[0]);
+        $this->assertSame('shello', $seen[1]);
+        $this->assertSame($client, $seen[2]);
+    }
 
-// ---------------------------------------------------------------------------
-// the subscribe-ack arm (swallowed) and the unsubscribe-ack delegation
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // the subscribe-ack arm (swallowed) and the unsubscribe-ack delegation
+    // -----------------------------------------------------------------------
 
-it('subscribe wrapper swallows the subscribe ack without invoking the user cb', function () {
-    $client = subClient();
-    $userCalled = false;
-    $client->subscribe('chan', function () use (&$userCalled) {
-        $userCalled = true;
-    });
-    $wrapper = subWrapper($client);
+    public function test_subscribe_wrapper_swallows_the_subscribe_ack_without_invoking_the_user_cb(): void
+    {
+        $client = subClient();
+        $userCalled = false;
+        $client->subscribe('chan', function () use (&$userCalled) {
+            $userCalled = true;
+        });
+        $wrapper = subWrapper($client);
 
-    $wrapper(['subscribe', 'chan', 1]);
+        $wrapper(['subscribe', 'chan', 1]);
 
-    expect($userCalled)->toBeFalse();
-    // The lock-bearing entry is still queued (ack does not tear down on subscribe).
-    expect(subProp($client, '_queue'))->toHaveCount(1);
-});
+        $this->assertFalse($userCalled);
+        // The lock-bearing entry is still queued (ack does not tear down on subscribe).
+        $this->assertCount(1, subProp($client, '_queue'));
+    }
 
-it('subscribe wrapper delegates an unsubscribe ack (remaining 0) to handleUnsubscribeAck teardown', function () {
-    $client = subClient();
-    $client->subscribe('chan', function () {});
-    // Simulate the live subscribe lock that the ack must clear.
-    subSet($client, '_subscribe', true);
-    $wrapper = subWrapper($client);
+    public function test_subscribe_wrapper_delegates_an_unsubscribe_ack_remaining_0_to_handleunsubscribeack_teardown(): void
+    {
+        $client = subClient();
+        $client->subscribe('chan', function () {});
+        // Simulate the live subscribe lock that the ack must clear.
+        subSet($client, '_subscribe', true);
+        $wrapper = subWrapper($client);
 
-    $wrapper(['unsubscribe', 'chan', 0]);
+        $wrapper(['unsubscribe', 'chan', 0]);
 
-    // handleUnsubscribeAck cleared the lock and dropped the pinned SUBSCRIBE head.
-    expect(subProp($client, '_subscribe'))->toBeFalse();
-    expect(subProp($client, '_queue'))->toBe([]);
-});
+        // handleUnsubscribeAck cleared the lock and dropped the pinned SUBSCRIBE head.
+        $this->assertFalse(subProp($client, '_subscribe'));
+        $this->assertSame([], subProp($client, '_queue'));
+    }
 
-// ---------------------------------------------------------------------------
-// the default: unknown-response-type diagnostic arm
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // the default: unknown-response-type diagnostic arm
+    // -----------------------------------------------------------------------
 
-it('subscribe wrapper writes a diagnostic for an unknown response type', function () {
-    $client = subClient();
-    $client->subscribe('chan', function () {});
-    $wrapper = subWrapper($client);
+    public function test_subscribe_wrapper_writes_a_diagnostic_for_an_unknown_response_type(): void
+    {
+        $client = subClient();
+        $client->subscribe('chan', function () {});
+        $wrapper = subWrapper($client);
 
-    $out = captureEcho(fn () => $wrapper(['bogus-type', 'x']));
+        $out = captureEcho(fn () => $wrapper(['bogus-type', 'x']));
 
-    expect($out)->toContain('unknow response type for subscribe');
-    expect($out)->toContain('buffer:');
-});
+        $this->assertStringContainsString('unknow response type for subscribe', $out);
+        $this->assertStringContainsString('buffer:', $out);
+    }
 
-it('pSubscribe wrapper writes a diagnostic for an unknown response type', function () {
-    $client = subClient();
-    $client->pSubscribe('p*', function () {});
-    $wrapper = subWrapper($client);
+    public function test_psubscribe_wrapper_writes_a_diagnostic_for_an_unknown_response_type(): void
+    {
+        $client = subClient();
+        $client->pSubscribe('p*', function () {});
+        $wrapper = subWrapper($client);
 
-    $out = captureEcho(fn () => $wrapper(['bogus-type', 'x']));
+        $out = captureEcho(fn () => $wrapper(['bogus-type', 'x']));
 
-    expect($out)->toContain('unknow response type for psubscribe');
-});
+        $this->assertStringContainsString('unknow response type for psubscribe', $out);
+    }
 
-it('sSubscribe wrapper writes a diagnostic for an unknown response type', function () {
-    $client = subClient();
-    $client->sSubscribe('chan', function () {});
-    $wrapper = subWrapper($client);
+    public function test_ssubscribe_wrapper_writes_a_diagnostic_for_an_unknown_response_type(): void
+    {
+        $client = subClient();
+        $client->sSubscribe('chan', function () {});
+        $wrapper = subWrapper($client);
 
-    $out = captureEcho(fn () => $wrapper(['bogus-type', 'x']));
+        $out = captureEcho(fn () => $wrapper(['bogus-type', 'x']));
 
-    expect($out)->toContain('unknow response type for ssubscribe');
-});
+        $this->assertStringContainsString('unknow response type for ssubscribe', $out);
+    }
 
-// ---------------------------------------------------------------------------
-// assertNoActiveStream — the second-stream guard throws (pure, no socket)
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // assertNoActiveStream — the second-stream guard throws (pure, no socket)
+    // -----------------------------------------------------------------------
 
-it('a second subscribe-family call throws because a stream is already pending', function () {
-    $client = subClient();
-    $client->subscribe('chan', function () {});
+    public function test_a_second_subscribe_family_call_throws_because_a_stream_is_already_pending(): void
+    {
+        $client = subClient();
+        $client->subscribe('chan', function () {});
 
-    // Every subscribe-family entry point routes through assertNoActiveStream();
-    // with a SUBSCRIBE already queued, streamActiveOrPending() is true.
-    expect(fn () => $client->subscribe('other', function () {}))
-        ->toThrow(\Workerman\Redis\Exception::class, 'active or pending');
-    expect(fn () => $client->pSubscribe('p*', function () {}))
-        ->toThrow(\Workerman\Redis\Exception::class, 'one stream per');
-    expect(fn () => $client->sSubscribe('s', function () {}))
-        ->toThrow(\Workerman\Redis\Exception::class);
-});
+        // Every subscribe-family entry point routes through assertNoActiveStream();
+        // with a SUBSCRIBE already queued, streamActiveOrPending() is true.
+        $this->assertThrows(\Workerman\Redis\Exception::class, 'active or pending', fn () => $client->subscribe('other', function () {}));
+        $this->assertThrows(\Workerman\Redis\Exception::class, 'one stream per', fn () => $client->pSubscribe('p*', function () {}));
+        $this->assertThrows(\Workerman\Redis\Exception::class, null, fn () => $client->sSubscribe('s', function () {}));
+    }
+}

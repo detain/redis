@@ -61,207 +61,226 @@ function shapingQueue(Client $client): array
     return $out;
 }
 
-// ---------------------------------------------------------------------------
-// __call() trailing-callable popping
-// ---------------------------------------------------------------------------
+final class ClientCommandShapingTest extends \Tests\TestCase
+{
+    // -----------------------------------------------------------------------
+    // __call() trailing-callable popping
+    // -----------------------------------------------------------------------
 
-it('__call uppercases the verb and prepends it to the args', function () {
-    $client = shapingClient();
-    $client->get('mykey');
-
-    $queue = shapingQueue($client);
-    expect($queue)->toHaveCount(1);
-    expect($queue[0][0])->toBe(['GET', 'mykey']);
-    expect($queue[0][1])->toBeNull();
-});
-
-it('__call pops a trailing callable as the callback when count(args) > 1', function () {
-    $client = shapingClient();
-    $cb = function () {};
-    $client->get('mykey', $cb);
-
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['GET', 'mykey']);
-    expect($queue[0][1])->toBe($cb);
-});
-
-it('__call does NOT treat a lone callable arg as a callback (the documented footgun)', function () {
-    // count($args) === 1 and the method is not in the exception list, so the
-    // callable is sent as a literal command ARG, not popped as the callback.
-    $client = shapingClient();
-    $cb = function () {};
-    $client->get($cb);
-
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toHaveCount(2);
-    expect($queue[0][0][0])->toBe('GET');
-    expect($queue[0][0][1])->toBe($cb);     // the callable rode along as an arg
-    expect($queue[0][1])->toBeNull();        // and was NOT taken as the callback
-});
-
-it('__call pops a lone callable for the exception-list verbs (randomKey/multi/exec/discard)', function () {
-    foreach (['randomKey', 'multi', 'exec', 'discard'] as $verb) {
+    public function test_call_uppercases_the_verb_and_prepends_it_to_the_args(): void
+    {
         $client = shapingClient();
-        $cb = function () {};
-        $client->{$verb}($cb);
+        $client->get('mykey');
 
         $queue = shapingQueue($client);
-        // Only the uppercased verb makes it to the wire; the callable is popped.
-        expect($queue[0][0])->toBe([strtoupper($verb)]);
-        expect($queue[0][1])->toBe($cb);
+        $this->assertCount(1, $queue);
+        $this->assertSame(['GET', 'mykey'], $queue[0][0]);
+        $this->assertNull($queue[0][1]);
     }
-});
 
-it('__call keeps a non-callable last arg in place even with count > 1', function () {
-    // lPush routes through __call (no concrete method). With three args and a
-    // non-callable tail, nothing is popped as a callback.
-    $client = shapingClient();
-    $client->lPush('list', 'a', 'b');
+    public function test_call_pops_a_trailing_callable_as_the_callback_when_count_args_1(): void
+    {
+        $client = shapingClient();
+        $cb = function () {};
+        $client->get('mykey', $cb);
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['LPUSH', 'list', 'a', 'b']);
-    expect($queue[0][1])->toBeNull();
-});
+        $queue = shapingQueue($client);
+        $this->assertSame(['GET', 'mykey'], $queue[0][0]);
+        $this->assertSame($cb, $queue[0][1]);
+    }
 
-// ---------------------------------------------------------------------------
-// dispatcher() prefix styles
-// ---------------------------------------------------------------------------
+    public function test_call_does_not_treat_a_lone_callable_arg_as_a_callback_the_documented_footgun(): void
+    {
+        // count($args) === 1 and the method is not in the exception list, so the
+        // callable is sent as a literal command ARG, not popped as the callback.
+        $client = shapingClient();
+        $cb = function () {};
+        $client->get($cb);
 
-it('dispatcher glues the verb onto a dot-prefixed family (JSON.SET)', function () {
-    $client = shapingClient();
-    $client->json('set', 'doc', '$', '{"a":1}');
+        $queue = shapingQueue($client);
+        $this->assertCount(2, $queue[0][0]);
+        $this->assertSame('GET', $queue[0][0][0]);
+        $this->assertSame($cb, $queue[0][0][1]);     // the callable rode along as an arg
+        $this->assertNull($queue[0][1]);        // and was NOT taken as the callback
+    }
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['JSON.SET', 'doc', '$', '{"a":1}']);
-    expect($queue[0][1])->toBeNull();
-});
+    public function test_call_pops_a_lone_callable_for_the_exception_list_verbs_randomkey_multi_exec_discard(): void
+    {
+        foreach (['randomKey', 'multi', 'exec', 'discard'] as $verb) {
+            $client = shapingClient();
+            $cb = function () {};
+            $client->{$verb}($cb);
 
-it('dispatcher splits a space-prefixed family into two wire tokens (CONFIG GET)', function () {
-    $client = shapingClient();
-    $client->config('get', 'maxmemory');
+            $queue = shapingQueue($client);
+            // Only the uppercased verb makes it to the wire; the callable is popped.
+            $this->assertSame([strtoupper($verb)], $queue[0][0]);
+            $this->assertSame($cb, $queue[0][1]);
+        }
+    }
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['CONFIG', 'GET', 'maxmemory']);
-    expect($queue[0][1])->toBeNull();
-});
+    public function test_call_keeps_a_non_callable_last_arg_in_place_even_with_count_1(): void
+    {
+        // lPush routes through __call (no concrete method). With three args and a
+        // non-callable tail, nothing is popped as a callback.
+        $client = shapingClient();
+        $client->lPush('list', 'a', 'b');
 
-it('dispatcher pops a trailing callable (space-prefix) and uppercases the verb', function () {
-    $client = shapingClient();
-    $cb = function () {};
-    $client->cluster('info', $cb);
+        $queue = shapingQueue($client);
+        $this->assertSame(['LPUSH', 'list', 'a', 'b'], $queue[0][0]);
+        $this->assertNull($queue[0][1]);
+    }
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['CLUSTER', 'INFO']);
-    expect($queue[0][1])->toBe($cb);
-});
+    // -----------------------------------------------------------------------
+    // dispatcher() prefix styles
+    // -----------------------------------------------------------------------
 
-it('dispatcher pops a trailing callable (dot-prefix)', function () {
-    $client = shapingClient();
-    $cb = function () {};
-    $client->json('get', 'doc', $cb);
+    public function test_dispatcher_glues_the_verb_onto_a_dot_prefixed_family_json_set(): void
+    {
+        $client = shapingClient();
+        $client->json('set', 'doc', '$', '{"a":1}');
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['JSON.GET', 'doc']);
-    expect($queue[0][1])->toBe($cb);
-});
+        $queue = shapingQueue($client);
+        $this->assertSame(['JSON.SET', 'doc', '$', '{"a":1}'], $queue[0][0]);
+        $this->assertNull($queue[0][1]);
+    }
 
-it('dispatcher uppercases a lower-case verb for the dot family', function () {
-    $client = shapingClient();
-    $client->bf('add', 'filter', 'item');
+    public function test_dispatcher_splits_a_space_prefixed_family_into_two_wire_tokens_config_get(): void
+    {
+        $client = shapingClient();
+        $client->config('get', 'maxmemory');
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['BF.ADD', 'filter', 'item']);
-});
+        $queue = shapingQueue($client);
+        $this->assertSame(['CONFIG', 'GET', 'maxmemory'], $queue[0][0]);
+        $this->assertNull($queue[0][1]);
+    }
 
-// ---------------------------------------------------------------------------
-// rawCommand()
-// ---------------------------------------------------------------------------
+    public function test_dispatcher_pops_a_trailing_callable_space_prefix_and_uppercases_the_verb(): void
+    {
+        $client = shapingClient();
+        $cb = function () {};
+        $client->cluster('info', $cb);
 
-it('rawCommand queues the args verbatim with no verb prepended', function () {
-    // Invoke through reflection, not $client->rawCommand(...): the @method
-    // static tag for rawCommand is declared `...$commandAndArgs, $cb = null`
-    // (a parameter after a variadic), which PHPStan reads as max 2 args even
-    // though the concrete method is fully variadic. Reflection exercises the
-    // real method without tripping the tag and without weakening any type.
-    // (The malformed tag is a pre-existing src docblock issue — see report.)
-    $client = shapingClient();
-    $rawCommand = (new ReflectionClass(Client::class))->getMethod('rawCommand');
-    $rawCommand->invoke($client, 'CONFIG', 'GET', 'maxmemory');
+        $queue = shapingQueue($client);
+        $this->assertSame(['CLUSTER', 'INFO'], $queue[0][0]);
+        $this->assertSame($cb, $queue[0][1]);
+    }
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['CONFIG', 'GET', 'maxmemory']);
-    expect($queue[0][1])->toBeNull();
-});
+    public function test_dispatcher_pops_a_trailing_callable_dot_prefix(): void
+    {
+        $client = shapingClient();
+        $cb = function () {};
+        $client->json('get', 'doc', $cb);
 
-it('rawCommand pops a trailing callable', function () {
-    $client = shapingClient();
-    $cb = function () {};
-    $client->rawCommand('PING', $cb);
+        $queue = shapingQueue($client);
+        $this->assertSame(['JSON.GET', 'doc'], $queue[0][0]);
+        $this->assertSame($cb, $queue[0][1]);
+    }
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['PING']);
-    expect($queue[0][1])->toBe($cb);
-});
+    public function test_dispatcher_uppercases_a_lower_case_verb_for_the_dot_family(): void
+    {
+        $client = shapingClient();
+        $client->bf('add', 'filter', 'item');
 
-it('rawCommand throws InvalidArgumentException (SPL, not the package Exception) when empty', function () {
-    $client = shapingClient();
+        $queue = shapingQueue($client);
+        $this->assertSame(['BF.ADD', 'filter', 'item'], $queue[0][0]);
+    }
 
-    expect(fn () => $client->rawCommand())
-        ->toThrow(\InvalidArgumentException::class, 'rawCommand requires at least the command name');
-});
+    // -----------------------------------------------------------------------
+    // rawCommand()
+    // -----------------------------------------------------------------------
 
-it('rawCommand throws InvalidArgumentException when only a callable is passed', function () {
-    // The callable is popped first, leaving zero args -> the empty check fires.
-    $client = shapingClient();
+    public function test_rawcommand_queues_the_args_verbatim_with_no_verb_prepended(): void
+    {
+        // Invoke through reflection, not $client->rawCommand(...): the @method
+        // static tag for rawCommand is declared `...$commandAndArgs, $cb = null`
+        // (a parameter after a variadic), which PHPStan reads as max 2 args even
+        // though the concrete method is fully variadic. Reflection exercises the
+        // real method without tripping the tag and without weakening any type.
+        // (The malformed tag is a pre-existing src docblock issue — see report.)
+        $client = shapingClient();
+        $rawCommand = (new ReflectionClass(Client::class))->getMethod('rawCommand');
+        $rawCommand->invoke($client, 'CONFIG', 'GET', 'maxmemory');
 
-    expect(fn () => $client->rawCommand(function () {}))
-        ->toThrow(\InvalidArgumentException::class);
+        $queue = shapingQueue($client);
+        $this->assertSame(['CONFIG', 'GET', 'maxmemory'], $queue[0][0]);
+        $this->assertNull($queue[0][1]);
+    }
 
-    // And nothing was queued.
-    expect(shapingProp($client, '_queue'))->toBe([]);
-});
+    public function test_rawcommand_pops_a_trailing_callable(): void
+    {
+        $client = shapingClient();
+        $cb = function () {};
+        $client->rawCommand('PING', $cb);
 
-// ---------------------------------------------------------------------------
-// select() / auth() argument shaping
-// ---------------------------------------------------------------------------
+        $queue = shapingQueue($client);
+        $this->assertSame(['PING'], $queue[0][0]);
+        $this->assertSame($cb, $queue[0][1]);
+    }
 
-it('select shapes a SELECT command with the db number', function () {
-    $client = shapingClient();
-    $client->select(3);
+    public function test_rawcommand_throws_invalidargumentexception_spl_not_the_package_exception_when_empty(): void
+    {
+        $client = shapingClient();
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['SELECT', 3]);
-    // select() supplies a default no-op callback when none is given.
-    expect($queue[0][1])->toBeCallable();
-});
+        $this->assertThrows(\InvalidArgumentException::class, 'rawCommand requires at least the command name', fn () => $client->rawCommand());
+    }
 
-it('auth shapes an AUTH command with a single password', function () {
-    $client = shapingClient();
-    $client->auth('s3cret');
+    public function test_rawcommand_throws_invalidargumentexception_when_only_a_callable_is_passed(): void
+    {
+        // The callable is popped first, leaving zero args -> the empty check fires.
+        $client = shapingClient();
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['AUTH', 's3cret']);
-});
+        $this->assertThrows(\InvalidArgumentException::class, null, fn () => $client->rawCommand(function () {}));
 
-it('auth shapes an AUTH command with a username+password array (ACL auth)', function () {
-    $client = shapingClient();
-    $client->auth(['alice', 's3cret']);
+        // And nothing was queued.
+        $this->assertSame([], shapingProp($client, '_queue'));
+    }
 
-    $queue = shapingQueue($client);
-    expect($queue[0][0])->toBe(['AUTH', 'alice', 's3cret']);
-});
+    // -----------------------------------------------------------------------
+    // select() / auth() argument shaping
+    // -----------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// error() getter
-// ---------------------------------------------------------------------------
+    public function test_select_shapes_a_select_command_with_the_db_number(): void
+    {
+        $client = shapingClient();
+        $client->select(3);
 
-it('error() returns the empty string by default and the stored error after one is set', function () {
-    $client = shapingClient();
-    expect($client->error())->toBe('');
+        $queue = shapingQueue($client);
+        $this->assertSame(['SELECT', 3], $queue[0][0]);
+        // select() supplies a default no-op callback when none is given.
+        $this->assertIsCallable($queue[0][1]);
+    }
 
-    $prop = (new ReflectionClass(Client::class))->getProperty('_error');
-    $prop->setAccessible(true);
-    $prop->setValue($client, 'Workerman Redis Wait Timeout (600 seconds)');
+    public function test_auth_shapes_an_auth_command_with_a_single_password(): void
+    {
+        $client = shapingClient();
+        $client->auth('s3cret');
 
-    expect($client->error())->toBe('Workerman Redis Wait Timeout (600 seconds)');
-});
+        $queue = shapingQueue($client);
+        $this->assertSame(['AUTH', 's3cret'], $queue[0][0]);
+    }
+
+    public function test_auth_shapes_an_auth_command_with_a_username_password_array_acl_auth(): void
+    {
+        $client = shapingClient();
+        $client->auth(['alice', 's3cret']);
+
+        $queue = shapingQueue($client);
+        $this->assertSame(['AUTH', 'alice', 's3cret'], $queue[0][0]);
+    }
+
+    // -----------------------------------------------------------------------
+    // error() getter
+    // -----------------------------------------------------------------------
+
+    public function test_error_returns_the_empty_string_by_default_and_the_stored_error_after_one_is_set(): void
+    {
+        $client = shapingClient();
+        $this->assertSame('', $client->error());
+
+        $prop = (new ReflectionClass(Client::class))->getProperty('_error');
+        $prop->setAccessible(true);
+        $prop->setValue($client, 'Workerman Redis Wait Timeout (600 seconds)');
+
+        $this->assertSame('Workerman Redis Wait Timeout (600 seconds)', $client->error());
+    }
+}

@@ -52,194 +52,218 @@ function accGet(Client $client, string $name)
     return $prop->getValue($client);
 }
 
-// ---------------------------------------------------------------------------
-// getHost / getPort  (parsed from $_address)
-// ---------------------------------------------------------------------------
+final class ClientAccessorsTest extends \Tests\TestCase
+{
+    // -----------------------------------------------------------------------
+    // getHost / getPort  (parsed from $_address)
+    // -----------------------------------------------------------------------
 
-it('getHost parses the host out of the stored address URL', function () {
-    $client = accClient();
-    accSet($client, '_address', 'redis://127.0.0.1:6379');
+    public function test_gethost_parses_the_host_out_of_the_stored_address_url(): void
+    {
+        $client = accClient();
+        accSet($client, '_address', 'redis://127.0.0.1:6379');
 
-    expect($client->getHost())->toBe('127.0.0.1');
-});
+        $this->assertSame('127.0.0.1', $client->getHost());
+    }
 
-it('getHost returns null when the address cannot be parsed for a host', function () {
-    $client = accClient();
-    accSet($client, '_address', '');
+    public function test_gethost_returns_null_when_the_address_cannot_be_parsed_for_a_host(): void
+    {
+        $client = accClient();
+        accSet($client, '_address', '');
 
-    expect($client->getHost())->toBeNull();
-});
+        $this->assertNull($client->getHost());
+    }
 
-it('getPort parses the port out of the stored address URL', function () {
-    $client = accClient();
-    accSet($client, '_address', 'redis://127.0.0.1:6390');
+    public function test_getport_parses_the_port_out_of_the_stored_address_url(): void
+    {
+        $client = accClient();
+        accSet($client, '_address', 'redis://127.0.0.1:6390');
 
-    expect($client->getPort())->toBe(6390);
-});
+        $this->assertSame(6390, $client->getPort());
+    }
 
-it('getPort defaults to 6379 when the address carries no explicit port', function () {
-    $client = accClient();
-    accSet($client, '_address', 'redis://127.0.0.1');
+    public function test_getport_defaults_to_6379_when_the_address_carries_no_explicit_port(): void
+    {
+        $client = accClient();
+        accSet($client, '_address', 'redis://127.0.0.1');
 
-    expect($client->getPort())->toBe(6379);
-});
+        $this->assertSame(6379, $client->getPort());
+    }
 
-// ---------------------------------------------------------------------------
-// getDbNum / getAuth  ($_db, $_auth)
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // getDbNum / getAuth  ($_db, $_auth)
+    // -----------------------------------------------------------------------
 
-it('getDbNum returns the locally tracked database index as an int', function () {
-    $client = accClient();
-    accSet($client, '_db', 4);
+    public function test_getdbnum_returns_the_locally_tracked_database_index_as_an_int(): void
+    {
+        $client = accClient();
+        accSet($client, '_db', 4);
 
-    expect($client->getDbNum())->toBe(4)->toBeInt();
-});
+        $this->assertSame(4, $client->getDbNum());
+        $this->assertIsInt($client->getDbNum());
+    }
 
-it('getAuth returns the stored string credential', function () {
-    $client = accClient();
-    accSet($client, '_auth', 's3cret');
+    public function test_getauth_returns_the_stored_string_credential(): void
+    {
+        $client = accClient();
+        accSet($client, '_auth', 's3cret');
 
-    expect($client->getAuth())->toBe('s3cret');
-});
+        $this->assertSame('s3cret', $client->getAuth());
+    }
 
-it('getAuth returns the stored ACL [user, pass] array credential', function () {
-    $client = accClient();
-    accSet($client, '_auth', ['alice', 's3cret']);
+    public function test_getauth_returns_the_stored_acl_user_pass_array_credential(): void
+    {
+        $client = accClient();
+        accSet($client, '_auth', ['alice', 's3cret']);
 
-    expect($client->getAuth())->toBe(['alice', 's3cret']);
-});
+        $this->assertSame(['alice', 's3cret'], $client->getAuth());
+    }
 
-it('getAuth returns null when no credential was set', function () {
-    $client = accClient();
-    accSet($client, '_auth', null);
+    public function test_getauth_returns_null_when_no_credential_was_set(): void
+    {
+        $client = accClient();
+        accSet($client, '_auth', null);
 
-    expect($client->getAuth())->toBeNull();
-});
+        $this->assertNull($client->getAuth());
+    }
 
-// ---------------------------------------------------------------------------
-// getTimeout / getReadTimeout  (from $_options)
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // getTimeout / getReadTimeout  (from $_options)
+    // -----------------------------------------------------------------------
 
-it('getTimeout returns the configured connect_timeout option', function () {
-    $client = accClient();
-    accSet($client, '_options', ['connect_timeout' => 7]);
+    public function test_gettimeout_returns_the_configured_connect_timeout_option(): void
+    {
+        $client = accClient();
+        accSet($client, '_options', ['connect_timeout' => 7]);
 
-    expect($client->getTimeout())->toBe(7);
-});
+        $this->assertSame(7, $client->getTimeout());
+    }
 
-it('getTimeout returns null when connect_timeout is not configured', function () {
-    $client = accClient();
-    accSet($client, '_options', []);
+    public function test_gettimeout_returns_null_when_connect_timeout_is_not_configured(): void
+    {
+        $client = accClient();
+        accSet($client, '_options', []);
 
-    expect($client->getTimeout())->toBeNull();
-});
+        $this->assertNull($client->getTimeout());
+    }
 
-it('getReadTimeout returns the configured wait_timeout option', function () {
-    $client = accClient();
-    accSet($client, '_options', ['wait_timeout' => 120]);
+    public function test_getreadtimeout_returns_the_configured_wait_timeout_option(): void
+    {
+        $client = accClient();
+        accSet($client, '_options', ['wait_timeout' => 120]);
 
-    expect($client->getReadTimeout())->toBe(120);
-});
+        $this->assertSame(120, $client->getReadTimeout());
+    }
 
-it('getReadTimeout returns null when wait_timeout is not configured', function () {
-    $client = accClient();
-    accSet($client, '_options', []);
+    public function test_getreadtimeout_returns_null_when_wait_timeout_is_not_configured(): void
+    {
+        $client = accClient();
+        accSet($client, '_options', []);
 
-    expect($client->getReadTimeout())->toBeNull();
-});
+        $this->assertNull($client->getReadTimeout());
+    }
 
-// ---------------------------------------------------------------------------
-// isConnected  ($_connection null vs an object)
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // isConnected  ($_connection null vs an object)
+    // -----------------------------------------------------------------------
 
-it('isConnected returns false when there is no connection', function () {
-    $client = accClient();
-    accSet($client, '_connection', null);
+    public function test_isconnected_returns_false_when_there_is_no_connection(): void
+    {
+        $client = accClient();
+        accSet($client, '_connection', null);
 
-    expect($client->isConnected())->toBeFalse();
-});
+        $this->assertFalse($client->isConnected());
+    }
 
-it('isConnected returns true only when the connection reports ESTABLISHED', function () {
-    $client = accClient();
+    public function test_isconnected_returns_true_only_when_the_connection_reports_established(): void
+    {
+        $client = accClient();
 
-    // A tiny stand-in exposing getStatus(false); no real socket needed.
-    $established = new class {
-        public function getStatus($raw = true)
-        {
-            return 'ESTABLISHED';
-        }
-    };
-    accSet($client, '_connection', $established);
-    expect($client->isConnected())->toBeTrue();
+        // A tiny stand-in exposing getStatus(false); no real socket needed.
+        $established = new class {
+            public function getStatus($raw = true)
+            {
+                return 'ESTABLISHED';
+            }
+        };
+        accSet($client, '_connection', $established);
+        $this->assertTrue($client->isConnected());
 
-    $connecting = new class {
-        public function getStatus($raw = true)
-        {
-            return 'CONNECTING';
-        }
-    };
-    accSet($client, '_connection', $connecting);
-    expect($client->isConnected())->toBeFalse();
-});
+        $connecting = new class {
+            public function getStatus($raw = true)
+            {
+                return 'CONNECTING';
+            }
+        };
+        accSet($client, '_connection', $connecting);
+        $this->assertFalse($client->isConnected());
+    }
 
-// ---------------------------------------------------------------------------
-// getLastError / clearLastError  ($_error sentinel normalisation)
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // getLastError / clearLastError  ($_error sentinel normalisation)
+    // -----------------------------------------------------------------------
 
-it('getLastError returns null when no error is stored (the empty-string sentinel)', function () {
-    $client = accClient();
-    accSet($client, '_error', '');
+    public function test_getlasterror_returns_null_when_no_error_is_stored_the_empty_string_sentinel(): void
+    {
+        $client = accClient();
+        accSet($client, '_error', '');
 
-    expect($client->getLastError())->toBeNull();
-});
+        $this->assertNull($client->getLastError());
+    }
 
-it('getLastError returns the stored error string when one is set', function () {
-    $client = accClient();
-    accSet($client, '_error', 'ERR something went wrong');
+    public function test_getlasterror_returns_the_stored_error_string_when_one_is_set(): void
+    {
+        $client = accClient();
+        accSet($client, '_error', 'ERR something went wrong');
 
-    expect($client->getLastError())->toBe('ERR something went wrong');
-});
+        $this->assertSame('ERR something went wrong', $client->getLastError());
+    }
 
-it('clearLastError wipes the stored error and returns true', function () {
-    $client = accClient();
-    accSet($client, '_error', 'ERR boom');
+    public function test_clearlasterror_wipes_the_stored_error_and_returns_true(): void
+    {
+        $client = accClient();
+        accSet($client, '_error', 'ERR boom');
 
-    expect($client->clearLastError())->toBeTrue();
-    expect(accGet($client, '_error'))->toBe('');
-    expect($client->getLastError())->toBeNull();
-});
+        $this->assertTrue($client->clearLastError());
+        $this->assertSame('', accGet($client, '_error'));
+        $this->assertNull($client->getLastError());
+    }
 
-// ---------------------------------------------------------------------------
-// getPersistentID  (always null for this async client)
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // getPersistentID  (always null for this async client)
+    // -----------------------------------------------------------------------
 
-it('getPersistentID is always null (no persistent connections)', function () {
-    $client = accClient();
+    public function test_getpersistentid_is_always_null_no_persistent_connections(): void
+    {
+        $client = accClient();
 
-    expect($client->getPersistentID())->toBeNull();
-});
+        $this->assertNull($client->getPersistentID());
+    }
 
-// ---------------------------------------------------------------------------
-// getMultiple  (MGET alias — queues ['MGET', ...$keys])
-// ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // getMultiple  (MGET alias — queues ['MGET', ...$keys])
+    // -----------------------------------------------------------------------
 
-it('getMultiple queues an MGET command with the keys in order', function () {
-    $client = accClient();
-    $client->getMultiple(['k1', 'k2', 'k3']);
+    public function test_getmultiple_queues_an_mget_command_with_the_keys_in_order(): void
+    {
+        $client = accClient();
+        $client->getMultiple(['k1', 'k2', 'k3']);
 
-    $queue = accGet($client, '_queue');
-    expect($queue)->toHaveCount(1);
-    expect($queue[0][0])->toBe(['MGET', 'k1', 'k2', 'k3']);
-    // No trailing callable supplied -> callback slot is null.
-    expect($queue[0][2] ?? null)->toBeNull();
-});
+        $queue = accGet($client, '_queue');
+        $this->assertCount(1, $queue);
+        $this->assertSame(['MGET', 'k1', 'k2', 'k3'], $queue[0][0]);
+        // No trailing callable supplied -> callback slot is null.
+        $this->assertNull($queue[0][2] ?? null);
+    }
 
-it('getMultiple pops a trailing callable as the callback', function () {
-    $client = accClient();
-    $cb = function () {};
-    $client->getMultiple(['k1', 'k2'], $cb);
+    public function test_getmultiple_pops_a_trailing_callable_as_the_callback(): void
+    {
+        $client = accClient();
+        $cb = function () {};
+        $client->getMultiple(['k1', 'k2'], $cb);
 
-    $queue = accGet($client, '_queue');
-    expect($queue[0][0])->toBe(['MGET', 'k1', 'k2']);
-    expect($queue[0][2] ?? null)->toBe($cb);
-});
+        $queue = accGet($client, '_queue');
+        $this->assertSame(['MGET', 'k1', 'k2'], $queue[0][0]);
+        $this->assertSame($cb, $queue[0][2] ?? null);
+    }
+}

@@ -1,6 +1,18 @@
 parameters:
 	ignoreErrors:
 		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNull\(\) with null will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Unit/ClientAccessorsTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with ''3\.0000000000000004'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Unit/ClientScanAllTest.php
+
+		-
 			message: '#^Call to function is_callable\(\) with \*NEVER\* will always evaluate to true\.$#'
 			identifier: function.alreadyNarrowedType
 			count: 3
