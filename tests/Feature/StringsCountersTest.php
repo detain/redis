@@ -11,10 +11,8 @@
 |   INCRBYFLOAT, SETEX, PSETEX, SETNX, GETBIT/SETBIT,
 |   MSET/MGET (explicit mapCb path), MSETNX.
 |
-| NOTE: getMultiple() is advertised in @method as an MGET alias but has no
-| implementation — __call() sends the literal verb GETMULTIPLE, which both
-| engines reject ("ERR unknown command"). Reported to the reviewer; no test
-| is written for it (would only pin a bug).
+| NOTE: getMultiple() (the phpredis MGET alias) is now a real method and has
+| its own dedicated coverage in tests/Feature/GetMultipleTest.php.
 |
 | All keys use a pest:g4:str:<n>: prefix.
 |

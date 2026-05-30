@@ -411,6 +411,36 @@ iterator helper that supports both callback and Revolt coroutine modes:
 
 ### Fixed
 
+- **Broken phpredis-compat `@method` stubs → real local accessors.** Eleven
+  `@method` declarations (`getHost`, `getPort`, `getDbNum`, `getAuth`,
+  `getTimeout`, `getReadTimeout`, `isConnected`, `getLastError`,
+  `clearLastError`, `getPersistentID`, and `getMultiple`) had no implementation
+  and no `__call` mapping, so calling them sent the uppercased verb (`GETHOST`,
+  `ISCONNECTED`, `GETMULTIPLE`, …) to the server, which both engines reject as
+  unknown commands. They are now **real public methods**: the accessors return
+  client state synchronously (`getHost`/`getPort` parse `_address`;
+  `getDbNum`/`getAuth` mirror `_db`/`_auth`; `getTimeout`/`getReadTimeout` read
+  the `connect_timeout`/`wait_timeout` options the client actually uses;
+  `isConnected` checks the connection status null-safely; `getLastError` returns
+  `null` when clean, `clearLastError` resets it; `getPersistentID` is `null` —
+  this async client has no persistent connections), and `getMultiple()` is a real
+  `MGET` alias routed through `queueCommand()` (works in both callback and
+  coroutine modes). Covered by `tests/Unit/ClientAccessorsTest.php` (20 cases)
+  and `tests/Feature/GetMultipleTest.php`.
+- **Malformed `@method` PHPDoc (named param after a variadic).** `rawCommand`'s
+  `@method` read `(...$commandAndArgs, $cb = null)` — invalid, and it made PHPStan
+  see a 2-arg cap on a fully-variadic method. Fixed to `(...$commandAndArgs)`, and
+  the same drop-the-trailing-`$cb` fix was applied to every other `@method` line
+  with a parameter after the variadic.
+- **Test-harness temp-file leak.** The Feature-test subprocess runners
+  (`tests/Support/run-in-worker.php` and `run-in-worker-coroutine.php`) left a
+  `wm-redis-test-*.{pid,log}` pair per invocation in the system temp dir — the
+  bottom-of-file cleanup never ran because Workerman exits first, so a full suite
+  run leaked tens of thousands of files. The pid/log files are now scoped to a
+  dedicated `wm-redis-tests/` subdir and removed via a `register_shutdown_function`
+  plus an in-handler unlink before each child `exit()`, with a start-of-run
+  containment sweep in `bin/run-coverage.sh`. A full run now leaves zero residue.
+
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was
   flat-only and could not parse multi-bulk replies like SCAN's
   `[cursor, [keys]]`. Rewritten into recursive `measure()` / `decodeOne()`

@@ -35,7 +35,6 @@ use Workerman\Timer;
  * @method static int incrBy($key, $value, $cb = null)
  * @method static float incrByFloat($key, $value, $cb = null)
  * @method static array mGet(array $keys, $cb = null)
- * @method static array getMultiple(array $keys, $cb = null)
  * @method static bool setBit($key, $offset, $value, $cb = null)
  * @method static bool setEx($key, $ttl, $value, $cb = null)
  * @method static bool pSetEx($key, $ttl, $value, $cb = null)
@@ -46,10 +45,10 @@ use Workerman\Timer;
  * @method static array sortRo($key, $options = [], $cb = null)
  * Keys methods
  * @method static int copy($src, $dst, array $options = [], $cb = null)
- * @method static int del(...$keys, $cb = null)
- * @method static int unlink(...$keys, $cb = null)
+ * @method static int del(...$keys)
+ * @method static int unlink(...$keys)
  * @method static false|string dump($key, $cb = null)
- * @method static int exists(...$keys, $cb = null)
+ * @method static int exists(...$keys)
  * @method static bool expire($key, $ttl, $cb = null)
  * @method static bool pexpire($key, $ttl, $cb = null)
  * @method static bool expireAt($key, $timestamp, $cb = null)
@@ -64,7 +63,7 @@ use Workerman\Timer;
  * @method static string randomKey($cb = null)
  * @method static bool rename($srcKey, $dstKey, $cb = null)
  * @method static bool renameNx($srcKey, $dstKey, $cb = null)
- * @method static int touch(...$keys, $cb = null)
+ * @method static int touch(...$keys)
  * @method static string type($key, $cb = null)
  * @method static int ttl($key, $cb = null)
  * @method static int pttl($key, $cb = null)
@@ -76,7 +75,7 @@ use Workerman\Timer;
  * @method static bool hSetNx($key, $hashKey, $value, $cb = null)
  * @method static false|string hGet($key, $hashKey, $cb = null)
  * @method static false|int hLen($key, $cb = null)
- * @method static false|int hDel($key, ...$hashKeys, $cb = null)
+ * @method static false|int hDel($key, ...$hashKeys)
  * @method static array hKeys($key, $cb = null)
  * @method static array hVals($key, $cb = null)
  * @method static bool hExists($key, $hashKey, $cb = null)
@@ -86,15 +85,15 @@ use Workerman\Timer;
  * @method static string|array hRandField($key, $count = null, $withValues = false, $cb = null)
  * @method static array|null hScan($key, $cursor, array $options = [], $cb = null)
  * @method static array|false|null hScanAll($key, array $options = [], $cb = null)
- * @method static array hExpire($key, $seconds, $fieldsOrOptions, ...$fields, $cb = null)
- * @method static array hPersist($key, $fieldsOrOptions, ...$fields, $cb = null)
- * @method static array hExpireAt($key, $timestamp, $fieldsOrOptions, ...$fields, $cb = null)
- * @method static array hTtl($key, $fieldsOrOptions, ...$fields, $cb = null)
- * @method static array hExpireTime($key, $fieldsOrOptions, ...$fields, $cb = null)
- * @method static array hPExpire($key, $milliseconds, $fieldsOrOptions, ...$fields, $cb = null)
- * @method static array hPExpireAt($key, $timestamp, $fieldsOrOptions, ...$fields, $cb = null)
- * @method static array hPTtl($key, $fieldsOrOptions, ...$fields, $cb = null)
- * @method static array hPExpireTime($key, $fieldsOrOptions, ...$fields, $cb = null)
+ * @method static array hExpire($key, $seconds, $fieldsOrOptions, ...$fields)
+ * @method static array hPersist($key, $fieldsOrOptions, ...$fields)
+ * @method static array hExpireAt($key, $timestamp, $fieldsOrOptions, ...$fields)
+ * @method static array hTtl($key, $fieldsOrOptions, ...$fields)
+ * @method static array hExpireTime($key, $fieldsOrOptions, ...$fields)
+ * @method static array hPExpire($key, $milliseconds, $fieldsOrOptions, ...$fields)
+ * @method static array hPExpireAt($key, $timestamp, $fieldsOrOptions, ...$fields)
+ * @method static array hPTtl($key, $fieldsOrOptions, ...$fields)
+ * @method static array hPExpireTime($key, $fieldsOrOptions, ...$fields)
  * Lists methods
  * @method static array blPop($keys, $timeout, $cb = null)
  * @method static array brPop($keys, $timeout, $cb = null)
@@ -102,7 +101,7 @@ use Workerman\Timer;
  * @method static false|string lIndex($key, $index, $cb = null)
  * @method static int lInsert($key, $position, $pivot, $value, $cb = null)
  * @method static false|string lPop($key, $cb = null)
- * @method static false|int lPush($key, ...$entries, $cb = null)
+ * @method static false|int lPush($key, ...$entries)
  * @method static false|int lPushx($key, $value, $cb = null)
  * @method static array lRange($key, $start, $end, $cb = null)
  * @method static false|int lRem($key, $value, $count, $cb = null)
@@ -110,7 +109,7 @@ use Workerman\Timer;
  * @method static false|array lTrim($key, $start, $end, $cb = null)
  * @method static false|string rPop($key, $cb = null)
  * @method static false|string rPopLPush($srcKey, $dstKey, $cb = null)
- * @method static false|int rPush($key, ...$entries, $cb = null)
+ * @method static false|int rPush($key, ...$entries)
  * @method static false|int rPushX($key, $value, $cb = null)
  * @method static false|int lLen($key, $cb = null)
  * @method static false|string lMove($src, $dst, $srcWhere, $dstWhere, $cb = null)
@@ -130,10 +129,10 @@ use Workerman\Timer;
  * @method static bool sMove($src, $dst, $member, $cb = null)
  * @method static false|string|array sPop($key, $count = 0, $cb = null)
  * @method static false|string|array sRandMember($key, $count = 0, $cb = null)
- * @method static int sRem($key, ...$members, $cb = null)
- * @method static array sUnion(...$keys, $cb = null)
- * @method static false|int sUnionStore($dst, ...$keys, $cb = null)
- * @method static array sMIsMember($key, ...$members, $cb = null)
+ * @method static int sRem($key, ...$members)
+ * @method static array sUnion(...$keys)
+ * @method static false|int sUnionStore($dst, ...$keys)
+ * @method static array sMIsMember($key, ...$members)
  * @method static int sInterCard($numkeys, $keys, $limit = 0, $cb = null)
  * @method static array|null sScan($key, $cursor, array $options = [], $cb = null)
  * @method static array|false|null sScanAll($key, array $options = [], $cb = null)
@@ -153,14 +152,14 @@ use Workerman\Timer;
  * @method static array zRangeByLex($key, $min, $max, $offset = 0, $limit = 0, $cb = null)
  * @method static int zRank($key, $member, $cb = null)
  * @method static int zRevRank($key, $member, $cb = null)
- * @method static int zRem($key, ...$members, $cb = null)
+ * @method static int zRem($key, ...$members)
  * @method static int zRemRangeByRank($key, $start, $end, $cb = null)
  * @method static int zRemRangeByScore($key, $start, $end, $cb = null)
  * @method static array zRevRange($key, $start, $end, $withScores = false, $cb = null)
  * @method static double zScore($key, $member, $cb = null)
  * @method static int zunionstore($keyOutput, $arrayZSetKeys, $arrayWeights = [], $aggregateFunction = '', $cb = null)
  * @method static array zRandMember($key, $count = null, $withScores = false, $cb = null)
- * @method static array zMScore($key, ...$members, $cb = null)
+ * @method static array zMScore($key, ...$members)
  * @method static array zDiff($numkeys, $keys, $withScores = false, $cb = null)
  * @method static int zDiffStore($dst, $numkeys, $keys, $cb = null)
  * @method static array zInter($numkeys, $keys, array $options = [], $cb = null)
@@ -179,14 +178,14 @@ use Workerman\Timer;
  * @method static int pfCount($keys, $cb = null)
  * @method static bool pfMerge($dstKey, $srcKeys, $cb = null)
  * Bitmap methods
- * @method static int bitOp($operation, $destKey, ...$keys, $cb = null)
+ * @method static int bitOp($operation, $destKey, ...$keys)
  * @method static int bitPos($key, $bit, $start = 0, $end = -1, $byte = false, $cb = null)
- * @method static array bitField($key, ...$ops, $cb = null)
- * @method static array bitFieldRo($key, ...$ops, $cb = null)
+ * @method static array bitField($key, ...$ops)
+ * @method static array bitFieldRo($key, ...$ops)
  * Geocoding methods
- * @method static int geoAdd($key, $longitude, $latitude, $member, ...$items, $cb = null)
- * @method static array geoHash($key, ...$members, $cb = null)
- * @method static array geoPos($key, ...$members, $cb = null)
+ * @method static int geoAdd($key, $longitude, $latitude, $member, ...$items)
+ * @method static array geoHash($key, ...$members)
+ * @method static array geoPos($key, ...$members)
  * @method static double geoDist($key, $members, $unit = '', $cb = null)
  * @method static int|array geoRadius($key, $longitude, $latitude, $radius, $unit, $options = [], $cb = null)
  * @method static array geoRadiusByMember($key, $member, $radius, $units, $options = [], $cb = null)
@@ -270,12 +269,12 @@ use Workerman\Timer;
  * @method static string echo($message, $cb = null)
  * @method static array hello($protover = null, $cb = null)
  * Server administration
- * @method static mixed config(...$args, $cb = null)
- * @method static mixed acl(...$args, $cb = null)
- * @method static mixed slowLog(...$args, $cb = null)
- * @method static mixed memory(...$args, $cb = null)
- * @method static mixed command(...$args, $cb = null)
- * @method static mixed cluster(...$args, $cb = null)
+ * @method static mixed config(...$args)
+ * @method static mixed acl(...$args)
+ * @method static mixed slowLog(...$args)
+ * @method static mixed memory(...$args)
+ * @method static mixed command(...$args)
+ * @method static mixed cluster(...$args)
  * @method static int lastSave($cb = null)
  * @method static bool save($cb = null)
  * @method static bool bgSave($schedule = false, $cb = null)
@@ -284,10 +283,10 @@ use Workerman\Timer;
  * @method static bool shutdown($mode = 'SAVE', $cb = null)
  * @method static bool replicaOf($host, $port, $cb = null)
  * @method static bool slaveOf($host, $port, $cb = null)
- * @method static mixed debug(...$args, $cb = null)
+ * @method static mixed debug(...$args)
  * @method static mixed module(...$args)
  * @method static array moduleList($cb = null)
- * @method static int delEx(...$keys, $cb = null) — Dragonfly extension
+ * @method static int delEx(...$keys) — Dragonfly extension
  * @method static string digest($cb = null) — Dragonfly extension
  * RedisSearch (FT) module — supported by Dragonfly
  * @method static mixed ft(...$args)
@@ -304,7 +303,7 @@ use Workerman\Timer;
  * @method static bool ftSynUpdate($index, $groupId, ...$termsAndCb)
  * @method static array ftProfile($index, ...$args)
  * Generic methods
- * @method static mixed rawCommand(...$commandAndArgs, $cb = null)
+ * @method static mixed rawCommand(...$commandAndArgs)
  * Transactions methods
  * @method static multi($cb = null)
  * @method static mixed exec($cb = null)
@@ -316,22 +315,11 @@ use Workerman\Timer;
  * @method static mixed evalSha($sha, $args = [], $numKeys = 0, $cb = null)
  * @method static mixed evalRo($script, $args = [], $numKeys = 0, $cb = null)
  * @method static mixed evalShaRo($sha, $args = [], $numKeys = 0, $cb = null)
- * @method static mixed script($command, ...$scripts, $cb = null)
- * @method static mixed client(...$args, $cb = null)
- * @method static null|string getLastError($cb = null)
- * @method static bool clearLastError($cb = null)
+ * @method static mixed script($command, ...$scripts)
+ * @method static mixed client(...$args)
  * @method static mixed _prefix($value, $cb = null)
  * @method static mixed _serialize($value, $cb = null)
  * @method static mixed _unserialize($value, $cb = null)
- * Introspection methods
- * @method static bool isConnected($cb = null)
- * @method static mixed getHost($cb = null)
- * @method static mixed getPort($cb = null)
- * @method static false|int getDbNum($cb = null)
- * @method static false|double getTimeout($cb = null)
- * @method static mixed getReadTimeout($cb = null)
- * @method static mixed getPersistentID($cb = null)
- * @method static mixed getAuth($cb = null)
  */
 #[\AllowDynamicProperties]
 class Client
@@ -1735,6 +1723,168 @@ class Client
     function error()
     {
         return $this->_error;
+    }
+
+    /**
+     * getHost — local accessor (phpredis-compat).
+     *
+     * Returns the host parsed out of the stored connection URL ($_address,
+     * e.g. "redis://127.0.0.1:6379"). This is client state, NOT a server
+     * round-trip — it never touches the connection or the command queue.
+     *
+     * @return string|null  The host, or null if $_address cannot be parsed.
+     */
+    public function getHost()
+    {
+        $host = \parse_url($this->_address, \PHP_URL_HOST);
+
+        return $host === false ? null : $host;
+    }
+
+    /**
+     * getPort — local accessor (phpredis-compat).
+     *
+     * Returns the port parsed out of the stored connection URL. Defaults to
+     * 6379 when the URL carries no explicit port, matching the conventional
+     * Redis port the address is built around. Purely local, no round-trip.
+     *
+     * @return int
+     */
+    public function getPort()
+    {
+        $port = \parse_url($this->_address, \PHP_URL_PORT);
+
+        return $port === false || $port === null ? 6379 : (int)$port;
+    }
+
+    /**
+     * getDbNum — local accessor (phpredis-compat).
+     *
+     * Returns the currently selected database index as tracked locally by
+     * select()/connect(). No SELECT is sent; this reflects $_db only.
+     *
+     * @return int
+     */
+    public function getDbNum()
+    {
+        return (int)$this->_db;
+    }
+
+    /**
+     * getAuth — local accessor (phpredis-compat).
+     *
+     * Returns the stored auth credential exactly as supplied to auth()/the
+     * options: a string password, a [user, pass] array for ACL auth, or null
+     * when no credential was set. Purely local, no AUTH round-trip.
+     *
+     * @return mixed
+     */
+    public function getAuth()
+    {
+        return $this->_auth;
+    }
+
+    /**
+     * getTimeout — local accessor (phpredis-compat).
+     *
+     * Returns the configured connect timeout from the client options
+     * ('connect_timeout'), or null if none was configured. Local only.
+     *
+     * @return mixed  The configured connect timeout, or null.
+     */
+    public function getTimeout()
+    {
+        return $this->_options['connect_timeout'] ?? null;
+    }
+
+    /**
+     * getReadTimeout — local accessor (phpredis-compat).
+     *
+     * Returns the configured read/wait timeout from the client options
+     * ('wait_timeout' — the key the wait-timeout scan reads), or null if not
+     * configured. Local only, no round-trip.
+     *
+     * @return mixed  The configured wait timeout, or null.
+     */
+    public function getReadTimeout()
+    {
+        return $this->_options['wait_timeout'] ?? null;
+    }
+
+    /**
+     * isConnected — local accessor (phpredis-compat).
+     *
+     * Reports whether this client currently holds an established connection.
+     * $_connection is null until connect() runs and is reset to null on
+     * teardown, so a non-null connection in the ESTABLISHED state means we
+     * are connected.
+     *
+     * @return bool
+     */
+    public function isConnected()
+    {
+        return $this->_connection !== null
+            && $this->_connection->getStatus(false) === 'ESTABLISHED';
+    }
+
+    /**
+     * getLastError — local accessor (phpredis-compat).
+     *
+     * Returns the last stored error string, or null when there is none.
+     * phpredis returns null (not an empty string) when no error has occurred,
+     * so the internal '' sentinel is normalised to null here. Local only.
+     *
+     * @return string|null
+     */
+    public function getLastError()
+    {
+        return $this->_error === '' ? null : $this->_error;
+    }
+
+    /**
+     * clearLastError — local accessor (phpredis-compat).
+     *
+     * Clears the stored last-error string and returns true, mirroring
+     * phpredis. Local only, no round-trip.
+     *
+     * @return bool
+     */
+    public function clearLastError()
+    {
+        $this->_error = '';
+
+        return true;
+    }
+
+    /**
+     * getPersistentID — local accessor (phpredis-compat).
+     *
+     * This async client never opens persistent connections (every connection
+     * is a fresh AsyncTcpConnection torn down on close()), so there is no
+     * persistent-connection identifier to report. Always null. Local only.
+     *
+     * @return null
+     */
+    public function getPersistentID()
+    {
+        return null;
+    }
+
+    /**
+     * getMultiple — phpredis MGET alias.
+     *
+     * Unlike the other accessors here, this IS a server command: phpredis
+     * exposes getMultiple() as an alias for MGET, so it delegates to MGET via
+     * the normal command queue (works in both callback and coroutine modes).
+     * Returns the values for $keys in order, with null for any missing key.
+     *
+     * @param  array  $keys
+     * @param  callable|null  $cb
+     * @return mixed
+     */
+    public function getMultiple(array $keys, $cb = null)
+    {
+        return $this->queueCommand(\array_merge(['MGET'], $keys), $cb);
     }
 
     /**

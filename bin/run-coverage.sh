@@ -24,6 +24,11 @@ COVDIR="$ROOT/build/coverage"
 # docs/TEST_COVERAGE_PLAN.md "Coverage close-out". Override with COVERAGE_MIN=<pct>.
 COVERAGE_MIN="${COVERAGE_MIN:-90}"
 
+# 0. purge any residual per-process pid/log files from prior runs. The worker
+#    runners self-clean (register_shutdown_function + in-handler unlink), so this
+#    is just a containment sweep in case a child was hard-killed before exit().
+rm -rf "${TMPDIR:-/tmp}/wm-redis-tests"
+
 # 1. fresh coverage dir
 rm -rf "$COVDIR"
 mkdir -p "$COVDIR"

@@ -58,10 +58,26 @@ $redisUrl = getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379';
 $timeoutSeconds = (int)(getenv('REDIS_TEST_TIMEOUT') ?: 5);
 
 $uniq = bin2hex(random_bytes(6));
-Worker::$pidFile = sys_get_temp_dir() . "/wm-redis-coro-test-{$uniq}.pid";
-Worker::$logFile = sys_get_temp_dir() . "/wm-redis-coro-test-{$uniq}.log";
+// Scope per-process pid/log files into a dedicated subdir so any residual leak
+// is contained and trivially purgeable (bin/run-coverage.sh clears it at start).
+$tmpDir = sys_get_temp_dir() . '/wm-redis-tests';
+@mkdir($tmpDir, 0777, true);
+Worker::$pidFile = "{$tmpDir}/wm-redis-coro-test-{$uniq}.pid";
+Worker::$logFile = "{$tmpDir}/wm-redis-coro-test-{$uniq}.log";
 Worker::$stdoutFile = '/dev/null';
 Worker::$daemonize = false;
+
+// The pid/log files leak otherwise: Worker::runAll() and the $emit/$fail
+// handlers exit() (after SIGTERMing the master) before the bottom-of-file
+// unlink lines are ever reached. register_shutdown_function runs on exit(), and
+// each worker child exit(0)s itself in $emit/$fail, so its own shutdown handler
+// fires and removes these files. (Belt-and-suspenders: $emit/$fail also unlink
+// inline right before exit; the bottom-of-file unlinks remain as a fallback.)
+$cleanupTempFiles = static function () {
+    @unlink(Worker::$pidFile);
+    @unlink(Worker::$logFile);
+};
+register_shutdown_function($cleanupTempFiles);
 
 // Select the Revolt-backed Fiber driver. This is what loads Revolt\EventLoop
 // (so the client takes its coroutine path) AND makes Workerman run
@@ -122,14 +138,14 @@ $worker->count = 1;
 // resolves `$worker->eventLoop ?: static::$eventLoopClass`, so this guarantees
 // the Fiber driver even if static state is reset between fork and run.
 $worker->eventLoop = FiberEvent::class;
-$worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, $resultFd, &$emitted, $startCoverage, $dumpCoverage) {
+$worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, $resultFd, &$emitted, $startCoverage, $dumpCoverage, $cleanupTempFiles) {
     // Runs inside a real \Fiber (Coroutine::create) because the event loop is
     // the Fiber driver — so coroutine-mode commands in the snippet can suspend.
     $startCoverage();
 
     $redis = new Client($redisUrl);
 
-    $emit = function ($value) use (&$emitted, $resultFd, $dumpCoverage) {
+    $emit = function ($value) use (&$emitted, $resultFd, $dumpCoverage, $cleanupTempFiles) {
         if ($emitted) {
             return;
         }
@@ -137,6 +153,7 @@ $worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, 
         fwrite($resultFd, 'OK ' . json_encode($value, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) . "\n");
         fflush($resultFd);
         $dumpCoverage();
+        $cleanupTempFiles();
         $ppid = posix_getppid();
         if ($ppid > 1) {
             posix_kill($ppid, SIGTERM);
@@ -144,7 +161,7 @@ $worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, 
         exit(0);
     };
 
-    $fail = function ($msg) use (&$emitted, $resultFd, $dumpCoverage) {
+    $fail = function ($msg) use (&$emitted, $resultFd, $dumpCoverage, $cleanupTempFiles) {
         if ($emitted) {
             return;
         }
@@ -152,6 +169,7 @@ $worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, 
         fwrite($resultFd, 'FAIL ' . $msg . "\n");
         fflush($resultFd);
         $dumpCoverage();
+        $cleanupTempFiles();
         $ppid = posix_getppid();
         if ($ppid > 1) {
             posix_kill($ppid, SIGTERM);

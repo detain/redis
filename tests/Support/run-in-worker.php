@@ -49,10 +49,26 @@ $redisUrl = getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379';
 $timeoutSeconds = (int)(getenv('REDIS_TEST_TIMEOUT') ?: 5);
 
 $uniq = bin2hex(random_bytes(6));
-Worker::$pidFile = sys_get_temp_dir() . "/wm-redis-test-{$uniq}.pid";
-Worker::$logFile = sys_get_temp_dir() . "/wm-redis-test-{$uniq}.log";
+// Scope per-process pid/log files into a dedicated subdir so any residual leak
+// is contained and trivially purgeable (bin/run-coverage.sh clears it at start).
+$tmpDir = sys_get_temp_dir() . '/wm-redis-tests';
+@mkdir($tmpDir, 0777, true);
+Worker::$pidFile = "{$tmpDir}/wm-redis-test-{$uniq}.pid";
+Worker::$logFile = "{$tmpDir}/wm-redis-test-{$uniq}.log";
 Worker::$stdoutFile = '/dev/null';
 Worker::$daemonize = false;
+
+// The pid/log files leak otherwise: Worker::runAll() and the $emit/$fail
+// handlers exit() (after SIGTERMing the master) before the bottom-of-file
+// unlink lines are ever reached. register_shutdown_function runs on exit(), and
+// each worker child exit(0)s itself in $emit/$fail, so its own shutdown handler
+// fires and removes these files. (Belt-and-suspenders: $emit/$fail also unlink
+// inline right before exit; the bottom-of-file unlinks remain as a fallback.)
+$cleanupTempFiles = static function () {
+    @unlink(Worker::$pidFile);
+    @unlink(Worker::$logFile);
+};
+register_shutdown_function($cleanupTempFiles);
 
 $emitted = false;
 
@@ -117,14 +133,14 @@ $dumpCoverage = function () use (&$coverage, $coverageDir, $uniq) {
 
 $worker = new Worker();
 $worker->count = 1;
-$worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, $resultFd, &$emitted, $startCoverage, $dumpCoverage) {
+$worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, $resultFd, &$emitted, $startCoverage, $dumpCoverage, $cleanupTempFiles) {
     // Start coverage in THIS (forked) worker process, before any client/src
     // code runs, so pcov records the lines the snippet executes.
     $startCoverage();
 
     $redis = new Client($redisUrl);
 
-    $emit = function ($value) use (&$emitted, $resultFd, $dumpCoverage) {
+    $emit = function ($value) use (&$emitted, $resultFd, $dumpCoverage, $cleanupTempFiles) {
         if ($emitted) {
             return;
         }
@@ -133,6 +149,8 @@ $worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, 
         fflush($resultFd);
         // Dump coverage before tearing down so the .cov is flushed to disk.
         $dumpCoverage();
+        // Remove the per-process pid/log files on the normal exit path too.
+        $cleanupTempFiles();
         // Signal the master AND exit — stopAll() alone leaves the master
         // monitoring a child it will immediately try to respawn, leading
         // to a tight emit loop. SIGTERM to the parent (master) followed
@@ -144,7 +162,7 @@ $worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, 
         exit(0);
     };
 
-    $fail = function ($msg) use (&$emitted, $resultFd, $dumpCoverage) {
+    $fail = function ($msg) use (&$emitted, $resultFd, $dumpCoverage, $cleanupTempFiles) {
         if ($emitted) {
             return;
         }
@@ -152,6 +170,7 @@ $worker->onWorkerStart = function () use ($snippet, $redisUrl, $timeoutSeconds, 
         fwrite($resultFd, 'FAIL ' . $msg . "\n");
         fflush($resultFd);
         $dumpCoverage();
+        $cleanupTempFiles();
         $ppid = posix_getppid();
         if ($ppid > 1) {
             posix_kill($ppid, SIGTERM);
