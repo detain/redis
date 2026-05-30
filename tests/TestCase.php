@@ -34,4 +34,29 @@ abstract class TestCase extends BaseTestCase
         }
         fclose($fp);
     }
+
+    /**
+     * Assert that invoking $fn throws $class (and, when $msgSubstr is given, that
+     * the message contains it).
+     *
+     * Unlike PHPUnit's native expectException(), this can be called MULTIPLE times
+     * within a single test method, so a test can verify several independent throws.
+     *
+     * @param string      $class     Expected Throwable class (or parent class).
+     * @param string|null $msgSubstr Substring required in the exception message, or null to skip the check.
+     * @param callable    $fn        The code expected to throw.
+     */
+    protected function assertThrows(string $class, ?string $msgSubstr, callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf($class, $e);
+            if ($msgSubstr !== null) {
+                $this->assertStringContainsString($msgSubstr, $e->getMessage());
+            }
+            return;
+        }
+        $this->fail("Expected {$class} to be thrown");
+    }
 }
