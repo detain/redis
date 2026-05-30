@@ -34,12 +34,12 @@ rm -rf "$COVDIR"
 mkdir -p "$COVDIR"
 
 # 2. Unit tier in-process (captured by PHPUnit as a single .cov).
-php -d pcov.enabled=1 "$ROOT/vendor/bin/pest" \
+php -d pcov.enabled=1 "$ROOT/vendor/bin/phpunit" \
     --testsuite Unit \
     --coverage-php="$COVDIR/unit.cov"
 
 # 3. Feature tier — children dump their own .cov into COVERAGE_DIR.
-COVERAGE_DIR="$COVDIR" php -d pcov.enabled=1 "$ROOT/vendor/bin/pest" \
+COVERAGE_DIR="$COVDIR" php -d pcov.enabled=1 "$ROOT/vendor/bin/phpunit" \
     --testsuite Feature
 
 # 4. Merge + report + enforce the floor (the canonical coverage gate).
