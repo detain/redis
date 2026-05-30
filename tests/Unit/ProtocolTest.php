@@ -9,8 +9,12 @@ use Workerman\Redis\Protocols\Redis;
  */
 function protocolStubConnection(): \Workerman\Connection\ConnectionInterface
 {
+    // Signatures use only PHP 7.1-safe syntax (untyped params, ?bool, void) that
+    // stays LSP-compatible with BOTH Workerman v4 (untyped ConnectionInterface,
+    // exercised on the PHP 7.x legs) and v5 (typed `mixed`/`bool|null`). Avoid
+    // `mixed`/union-type syntax here — it is PHP 8.0+ and would parse-error on 7.2.
     return new class extends \Workerman\Connection\ConnectionInterface {
-        public function send(mixed $sendBuffer, bool $raw = false): bool|null { return null; }
+        public function send($sendBuffer, $raw = false): ?bool { return null; }
         public function getRemoteIp(): string { return ''; }
         public function getRemotePort(): int { return 0; }
         public function getRemoteAddress(): string { return ''; }
@@ -19,7 +23,7 @@ function protocolStubConnection(): \Workerman\Connection\ConnectionInterface
         public function getLocalAddress(): string { return ''; }
         public function isIpV4(): bool { return true; }
         public function isIpV6(): bool { return false; }
-        public function close(mixed $data = null, bool $raw = false): void {}
+        public function close($data = null, $raw = false): void {}
     };
 }
 

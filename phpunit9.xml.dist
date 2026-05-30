@@ -12,11 +12,9 @@
             <directory suffix="Test.php">./tests/Feature</directory>
         </testsuite>
     </testsuites>
-    <coverage>
-        <include>
-            <directory suffix=".php">./src</directory>
-        </include>
-    </coverage>
+    <!-- No <coverage> block: the 7.x legs don't run coverage, and omitting it
+         keeps this config valid under PHPUnit 8.5 (PHP 7.2 leg), which predates
+         the <coverage> element, as well as PHPUnit 9.x (PHP 7.3/7.4 legs). -->
     <php>
         <env name="REDIS_URL" value="redis://127.0.0.1:6379"/>
     </php>

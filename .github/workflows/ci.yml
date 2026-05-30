@@ -10,6 +10,13 @@ on:
 permissions:
   contents: read
 
+# Force any JS action still declaring `using: node20` (e.g. the artifact,
+# codecov, setup-php, codacy actions) to run on Node 24, silencing the
+# "Node.js 20 actions are deprecated" runner warnings. checkout/cache are
+# additionally bumped to their Node-24-native majors below.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test:
     name: PHPUnit + PHPStan (PHP ${{ matrix.php }} / ${{ matrix.backend }})
@@ -18,10 +25,11 @@ jobs:
       fail-fast: false
       matrix:
         # 7.2/7.3/7.4 prove the advertised `php: ">=7.2"` floor: there
-        # composer resolves PHPUnit 9 + Workerman 4 (the dev deps that gate
-        # the floor — phpstan, revolt — are stripped in the install step).
-        # 8.1/8.2/8.3 resolve the newest of everything (PHPUnit 12, Workerman 5).
-        php: ['7.2', '7.3', '7.4', '8.1', '8.2', '8.3']
+        # composer resolves PHPUnit 8.5 (on 7.2) or 9.6 (on 7.3/7.4) + Workerman 4
+        # (the dev deps that gate the floor — phpstan, revolt — are stripped in
+        # the install step). 8.1/8.2/8.3/8.5 resolve the newest of everything
+        # (PHPUnit 12, Workerman 5).
+        php: ['7.2', '7.3', '7.4', '8.1', '8.2', '8.3', '8.5']
         # Run the full suite against BOTH engines. The redis leg uses
         # redis-stack-server so JSON/BF/CMS/TopK/FT module commands run there too.
         backend: [dragonfly, redis]
@@ -37,7 +45,7 @@ jobs:
     # each leg provably talks to the right engine on redis://127.0.0.1:6379.
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Start Dragonfly
         if: matrix.backend == 'dragonfly'
@@ -86,7 +94,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache composer dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-php-${{ matrix.php }}-composer-${{ hashFiles('**/composer.json') }}
@@ -98,7 +106,8 @@ jobs:
         # resolutions), so always `composer update`. On PHP < 8.1 first strip
         # the dev deps that gate the floor — phpstan/phpstan needs >=7.4 and
         # revolt/event-loop needs >=8.1 — so Composer's platform check can
-        # auto-select PHPUnit 9 + Workerman 4. No version is hard-pinned.
+        # auto-select PHPUnit 8.5 (PHP 7.2) or 9.6 (PHP 7.3/7.4) + Workerman 4.
+        # No version is hard-pinned.
         run: |
           case "${{ matrix.php }}" in
             7.*)
@@ -115,12 +124,12 @@ jobs:
 
       # Test execution. Coverage runs on exactly ONE leg (php=8.3 &&
       # backend=dragonfly) via the merge pipeline, which captures Client.php
-      # (subprocess coverage). The 7.x legs use the PHPUnit-9 config
-      # (phpunit9.xml.dist: <coverage><include>, no cacheDirectory); the 8.x
-      # non-coverage legs use the default config (phpunit.xml.dist, PHPUnit 10+).
-      # Coroutine tests self-skip below 8.1 via the coroutineSupported() guard,
-      # so no CI-level exclusion is needed.
-      - name: Run PHPUnit (PHP 7.x, PHPUnit 9 config)
+      # (subprocess coverage). The 7.x legs use the legacy config
+      # (phpunit9.xml.dist: testsuites + env only, no <coverage>/cacheDirectory,
+      # so it validates under PHPUnit 8.5 and 9.x alike); the 8.x non-coverage
+      # legs use the default config (phpunit.xml.dist, PHPUnit 10+). Coroutine
+      # tests self-skip below 8.1 via coroutineSupported(), so no CI exclusion.
+      - name: Run PHPUnit (PHP 7.x, legacy config)
         if: ${{ startsWith(matrix.php, '7.') }}
         run: vendor/bin/phpunit -c phpunit9.xml.dist --colors=never
 
@@ -162,7 +171,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
