@@ -272,8 +272,8 @@ final class ClientSubscribeDispatchTest extends \Tests\TestCase
 
         // Every subscribe-family entry point routes through assertNoActiveStream();
         // with a SUBSCRIBE already queued, streamActiveOrPending() is true.
-        $this->assertThrows(\Workerman\Redis\Exception::class, 'active or pending', function () use ($client) { return $client->subscribe('other', function () {}); });
-        $this->assertThrows(\Workerman\Redis\Exception::class, 'one stream per', function () use ($client) { return $client->pSubscribe('p*', function () {}); });
-        $this->assertThrows(\Workerman\Redis\Exception::class, null, function () use ($client) { return $client->sSubscribe('s', function () {}); });
+        $this->assertThrows(\Workerman\Redis\Exception::class, 'active or pending', function () use ($client) { $client->subscribe('other', function () {}); });
+        $this->assertThrows(\Workerman\Redis\Exception::class, 'one stream per', function () use ($client) { $client->pSubscribe('p*', function () {}); });
+        $this->assertThrows(\Workerman\Redis\Exception::class, null, function () use ($client) { $client->sSubscribe('s', function () {}); });
     }
 }
