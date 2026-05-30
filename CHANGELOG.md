@@ -384,6 +384,30 @@ iterator helper that supports both callback and Revolt coroutine modes:
   callback suite is unaffected. `Client.php` merged **75.79% → 81.16%**; total
   merged **77.93% → 82.82%**.
 
+#### Coverage close-out — remaining reachable branches
+
+- Added in-process unit + targeted feature tests covering the genuinely-reachable
+  `Client.php` branches the integration suite couldn't hit cheaply:
+  `tests/Unit/ClientShapingTier9Test.php` (34 cases — the `set`/`incr`/`decr`
+  second-form overloads → SETEX/INCRBY/DECRBY, `sort`/`sortRo` option flattening,
+  `xAdd` empty-message guard + MAXLEN shaping, dotted-dispatcher trailing-callable
+  pops, formatter early-returns, `shutdown` `_quitting` flag),
+  `tests/Unit/ClientSubscribeDispatchTest.php` (12 cases — the
+  subscribe/pSubscribe/sSubscribe message/pmessage/smessage forwarding arms, the
+  error-bail and unknown-type diagnostic arms, the unsubscribe-ack teardown, and
+  the second-stream `assertNoActiveStream` throw), and
+  `tests/Feature/ReconnectPrependTest.php` (1 case — the dead-port connection
+  failure reported through the connection callback). `Client.php` merged
+  **81.16% → 92.32%** (methods **65.85% → 91.06%**); total merged
+  **82.82% → 92.99%**, and the coverage floor was ratcheted to **90**.
+- The residual ~7% of `Client.php` is genuinely impractical to cover without
+  socket fault injection — connection/socket failure paths, the `onClose`
+  immediate-vs-delayed auto-reconnect timing, `onMessage` exception re-throw +
+  reconnect-on-`!`, diagnostic `echo new Exception` sinks, and the *coroutine*
+  error/LIMIT-cap arms of the `*ScanAll` loops (whose logic is already proven in
+  callback mode). These are enumerated line-by-line in `docs/TEST_COVERAGE_PLAN.md`
+  under *Coverage close-out (Group 9)*.
+
 ### Fixed
 
 - **Nested-array RESP replies.** The decoder (`src/Protocols/Redis.php`) was

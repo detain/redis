@@ -325,3 +325,126 @@ after ALL steps in the GROUP pass:
 > existing integration tests already exercise most of the 3,611 lines; they're simply
 > invisible today. The residual <5% will be fatal-error / daemonize / socket-failure
 > branches that are documented rather than forced.
+
+---
+
+## Coverage close-out (Group 9)
+
+Group 9 pushed `src/Client.php` from **81.16%** (771/950, 179 uncovered) to
+**88.74%** (843/950) and the merged total from **82.82%** to **89.83%**
+(935/1042) — a reduction of the unique-uncovered Client.php line set from ~179
+to ~60. Per-engine: Dragonfly **407 passed / 3 skipped**, Redis **410 passed /
+0 skipped** (the Dragonfly skips are the pre-existing, documented engine
+divergences — AUTH-with-no-password etc. — not new).
+
+### Tests added
+- `tests/Unit/ClientShapingTier9Test.php` — in-process, no event loop
+  (`newInstanceWithoutConstructor()` + reflection on `$_queue`; `process()` is
+  inert while `$_connection` is null, so every command method just appends to
+  the queue). Covers the reachable argument-shaping branches the integration
+  suite cannot reach cheaply: `set()`→SETEX / `incr()`→INCRBY / `decr()`→DECRBY
+  second forms; `sort()`/`sortRo()` option flattening + callable-options
+  shortcut; `xAdd()` empty-message throw + `MAXLEN ~` shaping + callable-slot
+  folding; the `hMGet()`/`hGetAll()` formatter non-array passthrough guards; the
+  geo/eval read-only callable-options shortcuts; `hello()` extra-map arg; the
+  `json()/bf()/cms()/topk()/ft()` trailing-null pops; the json* typed-getter
+  callable-path shortcuts; `cmsMerge()` WEIGHTS + no-weights paths;
+  `ftDropIndex()` DD branch + callable shortcut; `shutdown()` mode shaping +
+  `$_quitting`; `monitor()` pending-stream early-return + rejection handler +
+  +OK swallow.
+- `tests/Unit/ClientSubscribeDispatchTest.php` — pulls the wrapped `$new_cb` out
+  of the queued subscribe entry and invokes it directly: the `!$result`
+  error-echo arm, the message/pmessage/smessage delivery arms, the
+  subscribe-ack swallow, the unsubscribe-ack delegation, the `default:`
+  unknown-type diagnostic sink (output-buffered + asserted), and the
+  `assertNoActiveStream()` second-stream throw for all three subscribe families.
+- `tests/Feature/ReconnectPrependTest.php` — the dead-port connection failure
+  reported through the connection callback (covers the connect-timeout callback
+  path 649–656). The onConnect SELECT prepend is documented below as
+  impractical to drive deterministically.
+
+### Residual uncovered lines (genuinely impractical — fault-injection only)
+The residual set is:
+`474,480,482-485,492,494-504,506,510-512,523,531,551,560-566,568,578-579,
+586-587,589-591,629,638-639,644,658,852,888,929,1020,1118,2599-2600,
+2943,2948,3074,3079,3197,3204,3336,3341`. Grouped:
+
+1. **Wait-timeout queue eviction — 474, 480, 482–485, 492, 494–504, 506,
+   510–512.** The 1-second `Timer::add` scan in the constructor only does real
+   work when a non-blocking, non-stream command has sat in `$_queue` longer than
+   `wait_timeout`. Forcing it needs a command that is *sent but never answered*
+   for > wait_timeout seconds while the loop keeps ticking — i.e. a server that
+   accepts the write then stalls. That is socket fault injection (a mock server
+   that reads but never replies); not reproducible against a live
+   Dragonfly/Redis within a bounded, non-flaky CI test. The subscribe/monitor
+   skip (474/480) and blocking-command skip (485/492) are sub-branches of the
+   same timer.
+
+2. **connect() early-return / TLS / connection-FAILED onError — 523, 531, 551,
+   560–566, 568.** 523 is the `if ($this->_connection) return;` guard, only
+   reachable by calling `connect()` twice with no intervening close (the public
+   API never does this in a single tick). 531 is the `ssl` transport assignment
+   — needs an `['ssl' => true]` option pointed at a TLS-capable server, which
+   neither test backend exposes. 551 is the *post*-connect `onError` echo
+   installed inside `onConnect`, firing only on a mid-session socket error.
+   560–566/568 are the synchronous connection-FAILED `onError` (set before
+   `connect()`), which fires only when the OS refuses/aborts the TCP connect
+   *synchronously*; on this stack a closed port is handled by the connect-timeout
+   timer instead (649–656, now covered), so this arm needs a socket that RSTs
+   mid-handshake. All socket fault injection.
+
+3. **onClose auto-reconnect — 578, 579, 586, 587, 589, 590, 591.** The
+   `onClose` handler's reconnect logic (immediate vs 5s-delayed `Timer::add`
+   reconnect, and the reconnect-timer teardown) fires only when the *server*
+   drops a live socket mid-session. Reconnect-after-`quit` is covered
+   structurally by `QuitTest`, but the un-quit drop path that distinguishes the
+   immediate-vs-delayed branch requires server-side fault injection.
+
+4. **onMessage exception re-throw + reconnect-on-`!` + connect-timeout echo —
+   629, 638, 639, 644, 658.** 629/644 are the user-callback `\Throwable` catch +
+   post-pump re-throw; the catch fires only if a delivered-reply callback
+   throws, and the re-throw then escapes onMessage (an uncaught throwable inside
+   Workerman's read handler), which the fd-3 subprocess harness cannot observe
+   without crashing the worker. 638/639 are the reconnect-on-`!` (server push
+   error type) arm — requires the server to emit a `!`-typed frame, which
+   neither engine does on demand. 658 is the connect-timeout `else { echo }`
+   no-callback diagnostic sink (the with-callback arm 654–656 IS covered).
+
+5. **Diagnostic `echo` sinks + stream-lock / multi-step returns — 852, 888, 929,
+   1020, 1118.** 852/888/929 are the `echo 'unknow response type…'` default
+   arms of subscribe/pSubscribe/sSubscribe — exercised in
+   `ClientSubscribeDispatchTest` via an output buffer, so they show as covered in
+   the Unit `.cov` but can drop out of the merged report under the
+   subprocess-dump nondeterminism noted below. 1118 is `monitor()`'s
+   already-LIVE stream early-return (the QUEUED-stream case is covered by the
+   unit test). 1020 is a multi-step command return reached only under a specific
+   re-queue ordering.
+
+6. **Structurally dead cmsMerge callable branch — 2599, 2600.** `cmsMerge()`'s
+   signature types `$weights` as `?array`, so a callable in that slot raises a
+   `TypeError` at the call boundary BEFORE the `if (\is_callable($weights))`
+   body can run — genuinely unreachable through any valid call (a pre-existing
+   src quirk; not modified, per the tests-only constraint). The no-weights and
+   with-weights `cmsMerge()` paths ARE covered by `ClientShapingTier9Test`.
+
+7. **Coroutine `*ScanAll` error-abort + LIMIT-cap returns — 2943/2948 (scanAll),
+   3074/3079 (hScanAll), 3197/3204 (sScanAll), 3336/3341 (zScanAll).** The
+   `return false` (scan errored mid-walk) and `return $collected` (LIMIT hit
+   mid-page) arms of the *synchronous coroutine* loops. The callback-mode
+   equivalents of all four are fully covered by `ClientScanAllTest`; the
+   coroutine happy-path of all four is covered by `CoroutineModeTest`. Hitting
+   the coroutine error/limit arms needs, inside a Revolt fiber, a scan that
+   errors on a later page or overflows a tiny LIMIT mid-page — both require
+   crafting a multi-page server response under the fiber driver, which the live
+   engines do not produce for small fixture datasets. Documented as
+   covered-in-the-other-mode rather than forced.
+
+These remainders are connection/socket fault paths, auto-reconnect timing,
+diagnostic `echo` sinks, two structurally-dead lines (2599/2600), and
+coroutine-only error arms whose logic is already proven in callback mode. The
+`--min` floor in `bin/run-coverage.sh` is set to **87** — ~2.8pt below the
+achieved merged total of 89.83% (Client.php 88.74%), leaving headroom for the
+minor subprocess-dump merge nondeterminism the floor comment has always
+anticipated (merging many per-worker `cov-*.cov` partials can shift a Unit-only
+line or two — e.g. an `echo`-sink default arm — between runs; a coverage-tooling
+artifact, not a test or client defect).

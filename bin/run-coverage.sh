@@ -15,12 +15,14 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 COVDIR="$ROOT/build/coverage"
 
 # Coverage floor (Step 0.4). The merge script fails non-zero if the MERGED total
-# line coverage drops below this. Ratcheted up as each group lands more tests:
-# Group 0 baseline 68.62%, Group 1 (Protocols/Redis -> 100%) 69.48%, Group 2
-# (Client pure-logic units) 71.31% -> floor 70 (a couple points of headroom for
-# minor subprocess-dump nondeterminism). RATCHET toward 95 as later groups land
-# (Group 9 sets the final achieved number). Override with COVERAGE_MIN=<pct>.
-COVERAGE_MIN="${COVERAGE_MIN:-70}"
+# line coverage drops below this. Ratcheted up as each group landed more tests:
+# Group 0 68.62% -> Group 8 82.82% -> Group 9 (close-out) 92.99% total / Client.php
+# 92.32%. Floor set to 90 — a few points below the achieved 92.99% to absorb the
+# minor subprocess-dump nondeterminism (the merged total can vary by a line or two
+# between runs). The residual ~7% is genuinely impractical fault-injection paths
+# (socket failures, auto-reconnect timing, coroutine error arms) documented in
+# docs/TEST_COVERAGE_PLAN.md "Coverage close-out". Override with COVERAGE_MIN=<pct>.
+COVERAGE_MIN="${COVERAGE_MIN:-90}"
 
 # 1. fresh coverage dir
 rm -rf "$COVDIR"
