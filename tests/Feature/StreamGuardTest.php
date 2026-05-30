@@ -15,50 +15,53 @@
 | (when the flags are still false).
 */
 
-it('a second subscribe on the same client throws instead of silently dropping', function () {
+final class StreamGuardTest extends \Tests\RedisTestCase
+{
+    public function test_a_second_subscribe_on_the_same_client_throws_instead_of_silently_dropping(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->subscribe(['pest:streamguard:t1:a'], function () {});
+            try {
+                // Second subscribe — the first is still pending in the queue, so
+                // the flags are false but streamActiveOrPending() still catches it.
+                $redis->subscribe(['pest:streamguard:t1:b'], function () {});
+                $emit('no-throw');
+            } catch (\Workerman\Redis\Exception $e) {
+                $emit('threw');
+            }
+        PHP, 5);
 
-    $result = runInWorker(<<<'PHP'
-        $redis->subscribe(['pest:streamguard:t1:a'], function () {});
-        try {
-            // Second subscribe — the first is still pending in the queue, so
-            // the flags are false but streamActiveOrPending() still catches it.
-            $redis->subscribe(['pest:streamguard:t1:b'], function () {});
-            $emit('no-throw');
-        } catch (\Workerman\Redis\Exception $e) {
-            $emit('threw');
-        }
-    PHP, 5);
+        $this->assertSame('threw', $result);
+    }
 
-    expect($result)->toBe('threw');
-});
+    public function test_mixing_psubscribe_after_subscribe_on_one_client_throws(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->subscribe(['pest:streamguard:t2:a'], function () {});
+            try {
+                $redis->pSubscribe(['pest:streamguard:t2:*'], function () {});
+                $emit('no-throw');
+            } catch (\Workerman\Redis\Exception $e) {
+                $emit('threw');
+            }
+        PHP, 5);
 
-it('mixing pSubscribe after subscribe on one client throws', function () {
+        $this->assertSame('threw', $result);
+    }
 
-    $result = runInWorker(<<<'PHP'
-        $redis->subscribe(['pest:streamguard:t2:a'], function () {});
-        try {
-            $redis->pSubscribe(['pest:streamguard:t2:*'], function () {});
-            $emit('no-throw');
-        } catch (\Workerman\Redis\Exception $e) {
-            $emit('threw');
-        }
-    PHP, 5);
+    public function test_a_single_subscribe_is_unaffected_an_ordinary_command_still_drains_after_unsubscribe(): void
+    {
+        // Sanity check that the guard does not block the normal single-stream flow.
+        $result = runInWorker(<<<'PHP'
+            $redis->subscribe(['pest:streamguard:t3:chan'], function () {});
+            \Workerman\Timer::add(0.3, function () use ($redis, $emit) {
+                $redis->unsubscribe();
+                $redis->ping(function ($pong) use ($emit) {
+                    $emit($pong);
+                });
+            }, [], false);
+        PHP, 5);
 
-    expect($result)->toBe('threw');
-});
-
-it('a single subscribe is unaffected — an ordinary command still drains after unsubscribe', function () {
-
-    // Sanity check that the guard does not block the normal single-stream flow.
-    $result = runInWorker(<<<'PHP'
-        $redis->subscribe(['pest:streamguard:t3:chan'], function () {});
-        \Workerman\Timer::add(0.3, function () use ($redis, $emit) {
-            $redis->unsubscribe();
-            $redis->ping(function ($pong) use ($emit) {
-                $emit($pong);
-            });
-        }, [], false);
-    PHP, 5);
-
-    expect($result)->toBe('PONG');
-});
+        $this->assertSame('PONG', $result);
+    }
+}

@@ -20,188 +20,191 @@
 | feature tests.
 */
 
-it('getDel returns the value and deletes the key', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $redis->set('pest:extra:getdel', 'v', function () use ($redis, $emit) {
-            $redis->getDel('pest:extra:getdel', function ($value) use ($redis, $emit) {
-                $redis->get('pest:extra:getdel', function ($after) use ($value, $emit) {
-                    $emit(['value' => $value, 'after' => $after]);
-                });
-            });
-        });
-    PHP);
-
-    expect($result)->toBeArray();
-    expect($result['value'])->toBe('v');
-    expect($result['after'])->toBeNull();
-});
-
-it('getEx without options returns the value without changing TTL', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $redis->set('pest:extra:getex:plain', 'v', function () use ($redis, $emit) {
-            $redis->getEx('pest:extra:getex:plain', function ($value) use ($emit) {
-                $emit($value);
-            });
-        });
-    PHP);
-
-    expect($result)->toBe('v');
-});
-
-it('getEx EX sets a TTL', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $redis->set('pest:extra:getex:ttl', 'v', function () use ($redis, $emit) {
-            $redis->getEx('pest:extra:getex:ttl', ['EX', 60], function ($value) use ($redis, $emit) {
-                $redis->ttl('pest:extra:getex:ttl', function ($ttl) use ($value, $emit) {
-                    $emit(['value' => $value, 'ttl' => $ttl]);
-                });
-            });
-        });
-    PHP);
-
-    expect($result)->toBeArray();
-    expect($result['value'])->toBe('v');
-    expect($result['ttl'])->toBeGreaterThanOrEqual(1);
-    expect($result['ttl'])->toBeLessThanOrEqual(60);
-});
-
-it('substr returns a slice of the value', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $redis->set('pest:extra:substr', 'hello world', function () use ($redis, $emit) {
-            $redis->substr('pest:extra:substr', 0, 4, function ($slice) use ($emit) {
-                $emit($slice);
-            });
-        });
-    PHP);
-
-    expect($result)->toBe('hello');
-});
-
-it('copy duplicates a key to a new destination', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $redis->del('pest:extra:copy:src', 'pest:extra:copy:dst', function () use ($redis, $emit) {
-            $redis->set('pest:extra:copy:src', 'value', function () use ($redis, $emit) {
-                $redis->copy('pest:extra:copy:src', 'pest:extra:copy:dst', function ($ok) use ($redis, $emit) {
-                    $redis->get('pest:extra:copy:dst', function ($dst) use ($ok, $emit) {
-                        $emit(['ok' => $ok, 'dst' => $dst]);
+final class StringsKeysExtraTest extends \Tests\RedisTestCase
+{
+    public function test_getdel_returns_the_value_and_deletes_the_key(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->set('pest:extra:getdel', 'v', function () use ($redis, $emit) {
+                $redis->getDel('pest:extra:getdel', function ($value) use ($redis, $emit) {
+                    $redis->get('pest:extra:getdel', function ($after) use ($value, $emit) {
+                        $emit(['value' => $value, 'after' => $after]);
                     });
                 });
             });
-        });
-    PHP);
+        PHP);
 
-    expect($result)->toBeArray();
-    expect($result['ok'])->toBe(1);
-    expect($result['dst'])->toBe('value');
-});
+        $this->assertIsArray($result);
+        $this->assertSame('v', $result['value']);
+        $this->assertNull($result['after']);
+    }
 
-it('copy with REPLACE overwrites existing dst', function () {
+    public function test_getex_without_options_returns_the_value_without_changing_ttl(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->set('pest:extra:getex:plain', 'v', function () use ($redis, $emit) {
+                $redis->getEx('pest:extra:getex:plain', function ($value) use ($emit) {
+                    $emit($value);
+                });
+            });
+        PHP);
 
-    $result = runInWorker(<<<'PHP'
-        $redis->del('pest:extra:copy:rsrc', 'pest:extra:copy:rdst', function () use ($redis, $emit) {
-            $redis->set('pest:extra:copy:rsrc', 'v1', function () use ($redis, $emit) {
-                $redis->set('pest:extra:copy:rdst', 'v2', function () use ($redis, $emit) {
-                    // Without REPLACE: copying onto an existing key returns 0.
-                    $redis->copy('pest:extra:copy:rsrc', 'pest:extra:copy:rdst', function ($noReplace) use ($redis, $emit) {
-                        // With REPLACE: overwrites and returns 1.
-                        $redis->copy('pest:extra:copy:rsrc', 'pest:extra:copy:rdst', ['REPLACE'], function ($withReplace) use ($redis, $noReplace, $emit) {
-                            $redis->get('pest:extra:copy:rdst', function ($dst) use ($noReplace, $withReplace, $emit) {
-                                $emit([
-                                    'noReplace'   => $noReplace,
-                                    'withReplace' => $withReplace,
-                                    'dst'         => $dst,
-                                ]);
+        $this->assertSame('v', $result);
+    }
+
+    public function test_getex_ex_sets_a_ttl(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->set('pest:extra:getex:ttl', 'v', function () use ($redis, $emit) {
+                $redis->getEx('pest:extra:getex:ttl', ['EX', 60], function ($value) use ($redis, $emit) {
+                    $redis->ttl('pest:extra:getex:ttl', function ($ttl) use ($value, $emit) {
+                        $emit(['value' => $value, 'ttl' => $ttl]);
+                    });
+                });
+            });
+        PHP);
+
+        $this->assertIsArray($result);
+        $this->assertSame('v', $result['value']);
+        $this->assertGreaterThanOrEqual(1, $result['ttl']);
+        $this->assertLessThanOrEqual(60, $result['ttl']);
+    }
+
+    public function test_substr_returns_a_slice_of_the_value(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->set('pest:extra:substr', 'hello world', function () use ($redis, $emit) {
+                $redis->substr('pest:extra:substr', 0, 4, function ($slice) use ($emit) {
+                    $emit($slice);
+                });
+            });
+        PHP);
+
+        $this->assertSame('hello', $result);
+    }
+
+    public function test_copy_duplicates_a_key_to_a_new_destination(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->del('pest:extra:copy:src', 'pest:extra:copy:dst', function () use ($redis, $emit) {
+                $redis->set('pest:extra:copy:src', 'value', function () use ($redis, $emit) {
+                    $redis->copy('pest:extra:copy:src', 'pest:extra:copy:dst', function ($ok) use ($redis, $emit) {
+                        $redis->get('pest:extra:copy:dst', function ($dst) use ($ok, $emit) {
+                            $emit(['ok' => $ok, 'dst' => $dst]);
+                        });
+                    });
+                });
+            });
+        PHP);
+
+        $this->assertIsArray($result);
+        $this->assertSame(1, $result['ok']);
+        $this->assertSame('value', $result['dst']);
+    }
+
+    public function test_copy_with_replace_overwrites_existing_dst(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->del('pest:extra:copy:rsrc', 'pest:extra:copy:rdst', function () use ($redis, $emit) {
+                $redis->set('pest:extra:copy:rsrc', 'v1', function () use ($redis, $emit) {
+                    $redis->set('pest:extra:copy:rdst', 'v2', function () use ($redis, $emit) {
+                        // Without REPLACE: copying onto an existing key returns 0.
+                        $redis->copy('pest:extra:copy:rsrc', 'pest:extra:copy:rdst', function ($noReplace) use ($redis, $emit) {
+                            // With REPLACE: overwrites and returns 1.
+                            $redis->copy('pest:extra:copy:rsrc', 'pest:extra:copy:rdst', ['REPLACE'], function ($withReplace) use ($redis, $noReplace, $emit) {
+                                $redis->get('pest:extra:copy:rdst', function ($dst) use ($noReplace, $withReplace, $emit) {
+                                    $emit([
+                                        'noReplace'   => $noReplace,
+                                        'withReplace' => $withReplace,
+                                        'dst'         => $dst,
+                                    ]);
+                                });
                             });
                         });
                     });
                 });
             });
-        });
-    PHP);
+        PHP);
 
-    expect($result)->toBeArray();
-    expect($result['noReplace'])->toBe(0);
-    expect($result['withReplace'])->toBe(1);
-    expect($result['dst'])->toBe('v1');
-});
+        $this->assertIsArray($result);
+        $this->assertSame(0, $result['noReplace']);
+        $this->assertSame(1, $result['withReplace']);
+        $this->assertSame('v1', $result['dst']);
+    }
 
-it('touch returns count of existing keys', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $redis->del('pest:extra:touch:k1', 'pest:extra:touch:k2', 'pest:extra:touch:missing', function () use ($redis, $emit) {
-            $redis->set('pest:extra:touch:k1', 'v', function () use ($redis, $emit) {
-                $redis->set('pest:extra:touch:k2', 'v', function () use ($redis, $emit) {
-                    $redis->touch('pest:extra:touch:k1', 'pest:extra:touch:k2', 'pest:extra:touch:missing', function ($n) use ($emit) {
-                        $emit($n);
+    public function test_touch_returns_count_of_existing_keys(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->del('pest:extra:touch:k1', 'pest:extra:touch:k2', 'pest:extra:touch:missing', function () use ($redis, $emit) {
+                $redis->set('pest:extra:touch:k1', 'v', function () use ($redis, $emit) {
+                    $redis->set('pest:extra:touch:k2', 'v', function () use ($redis, $emit) {
+                        $redis->touch('pest:extra:touch:k1', 'pest:extra:touch:k2', 'pest:extra:touch:missing', function ($n) use ($emit) {
+                            $emit($n);
+                        });
                     });
                 });
             });
-        });
-    PHP);
+        PHP);
 
-    expect($result)->toBe(2);
-});
+        $this->assertSame(2, $result);
+    }
 
-it('expireTime returns absolute unix timestamp', function () {
+    public function test_expiretime_returns_absolute_unix_timestamp(): void
+    {
+        $future = time() + 3600;
 
-    $future = time() + 3600;
-
-    $result = runInWorker(<<<PHP
-        \$redis->set('pest:extra:expiretime', 'v', function () use (\$redis, \$emit) {
-            \$redis->expireAt('pest:extra:expiretime', {$future}, function () use (\$redis, \$emit) {
-                \$redis->expireTime('pest:extra:expiretime', function (\$ts) use (\$emit) {
-                    \$emit(\$ts);
+        $result = runInWorker(<<<PHP
+            \$redis->set('pest:extra:expiretime', 'v', function () use (\$redis, \$emit) {
+                \$redis->expireAt('pest:extra:expiretime', {$future}, function () use (\$redis, \$emit) {
+                    \$redis->expireTime('pest:extra:expiretime', function (\$ts) use (\$emit) {
+                        \$emit(\$ts);
+                    });
                 });
             });
-        });
-    PHP);
+        PHP);
 
-    expect($result)->toBe($future);
-});
+        $this->assertSame($future, $result);
+    }
 
-it('pExpireTime returns absolute millisecond timestamp', function () {
+    public function test_pexpiretime_returns_absolute_millisecond_timestamp(): void
+    {
+        $futureMs = (time() + 3600) * 1000;
 
-    $futureMs = (time() + 3600) * 1000;
-
-    $result = runInWorker(<<<PHP
-        \$redis->set('pest:extra:pexpiretime', 'v', function () use (\$redis, \$emit) {
-            \$redis->pexpireAt('pest:extra:pexpiretime', {$futureMs}, function () use (\$redis, \$emit) {
-                \$redis->pExpireTime('pest:extra:pexpiretime', function (\$ts) use (\$emit) {
-                    \$emit(\$ts);
+        $result = runInWorker(<<<PHP
+            \$redis->set('pest:extra:pexpiretime', 'v', function () use (\$redis, \$emit) {
+                \$redis->pexpireAt('pest:extra:pexpiretime', {$futureMs}, function () use (\$redis, \$emit) {
+                    \$redis->pExpireTime('pest:extra:pexpiretime', function (\$ts) use (\$emit) {
+                        \$emit(\$ts);
+                    });
                 });
             });
-        });
-    PHP);
+        PHP);
 
-    expect($result)->toBe($futureMs);
-});
+        $this->assertSame($futureMs, $result);
+    }
 
-it('echo returns the same message it was sent', function () {
+    public function test_echo_returns_the_same_message_it_was_sent(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->echo('pest-echo-msg', function ($reply) use ($emit) {
+                $emit($reply);
+            });
+        PHP);
 
-    $result = runInWorker(<<<'PHP'
-        $redis->echo('pest-echo-msg', function ($reply) use ($emit) {
-            $emit($reply);
-        });
-    PHP);
+        $this->assertSame('pest-echo-msg', $result);
+    }
 
-    expect($result)->toBe('pest-echo-msg');
-});
+    public function test_hello_returns_server_protocol_info(): void
+    {
+        // Some Dragonfly builds return an empty array for HELLO with no args.
+        // We just want to confirm the call completes without erroring and the
+        // reply is array-shaped (or empty array, treated as success).
+        $result = runInWorker(<<<'PHP'
+            $redis->hello(function ($reply) use ($emit) {
+                $emit($reply);
+            });
+        PHP);
 
-it('hello returns server protocol info', function () {
-
-    // Some Dragonfly builds return an empty array for HELLO with no args.
-    // We just want to confirm the call completes without erroring and the
-    // reply is array-shaped (or empty array, treated as success).
-    $result = runInWorker(<<<'PHP'
-        $redis->hello(function ($reply) use ($emit) {
-            $emit($reply);
-        });
-    PHP);
-
-    expect($result)->toBeArray();
-});
+        $this->assertIsArray($result);
+    }
+}

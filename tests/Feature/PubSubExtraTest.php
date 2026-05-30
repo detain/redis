@@ -18,48 +18,51 @@
 | than silently skipped.
 */
 
-it('sPublish returns the subscriber count when nobody is listening', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $redis->sPublish('pest:ps:t1:channel', 'hello', function ($n) use ($emit) {
-            $emit($n);
-        });
-    PHP);
-
-    expect($result)->toBe(0);
-});
-
-it('sSubscribe receives a message published via sPublish', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $sub = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
-        $pub = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
-        $sub->sSubscribe(['pest:ps:t2:chan'], function ($channel, $message, $client) use ($emit) {
-            $emit(['channel' => $channel, 'message' => $message]);
-        });
-        // Give SSUBSCRIBE a moment to register before publishing.
-        \Workerman\Timer::add(0.2, function () use ($pub) {
-            $pub->sPublish('pest:ps:t2:chan', 'sharded-hello');
-        }, [], false);
-    PHP, 5);
-
-    expect($result)->toBeArray();
-    expect($result['channel'])->toBe('pest:ps:t2:chan');
-    expect($result['message'])->toBe('sharded-hello');
-});
-
-it('pubSub CHANNELS returns active channels matching a pattern', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $sub = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
-        $sub->subscribe(['pest:ps:t3:chan-a'], function ($ch, $msg) {});
-        \Workerman\Timer::add(0.2, function () use ($redis, $emit) {
-            $redis->pubSub('CHANNELS', 'pest:ps:t3:*', function ($channels) use ($emit) {
-                $emit($channels);
+final class PubSubExtraTest extends \Tests\RedisTestCase
+{
+    public function test_spublish_returns_the_subscriber_count_when_nobody_is_listening(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->sPublish('pest:ps:t1:channel', 'hello', function ($n) use ($emit) {
+                $emit($n);
             });
-        }, [], false);
-    PHP, 5);
+        PHP);
 
-    expect($result)->toBeArray();
-    expect(count($result))->toBeGreaterThanOrEqual(1);
-});
+        $this->assertSame(0, $result);
+    }
+
+    public function test_ssubscribe_receives_a_message_published_via_spublish(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $sub = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
+            $pub = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
+            $sub->sSubscribe(['pest:ps:t2:chan'], function ($channel, $message, $client) use ($emit) {
+                $emit(['channel' => $channel, 'message' => $message]);
+            });
+            // Give SSUBSCRIBE a moment to register before publishing.
+            \Workerman\Timer::add(0.2, function () use ($pub) {
+                $pub->sPublish('pest:ps:t2:chan', 'sharded-hello');
+            }, [], false);
+        PHP, 5);
+
+        $this->assertIsArray($result);
+        $this->assertSame('pest:ps:t2:chan', $result['channel']);
+        $this->assertSame('sharded-hello', $result['message']);
+    }
+
+    public function test_pubsub_channels_returns_active_channels_matching_a_pattern(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $sub = new Workerman\Redis\Client(getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379');
+            $sub->subscribe(['pest:ps:t3:chan-a'], function ($ch, $msg) {});
+            \Workerman\Timer::add(0.2, function () use ($redis, $emit) {
+                $redis->pubSub('CHANNELS', 'pest:ps:t3:*', function ($channels) use ($emit) {
+                    $emit($channels);
+                });
+            }, [], false);
+        PHP, 5);
+
+        $this->assertIsArray($result);
+        $this->assertGreaterThanOrEqual(1, count($result));
+    }
+}
