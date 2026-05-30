@@ -31,9 +31,16 @@ Wire-compatible with both Redis and [Dragonfly](https://www.dragonflydb.io/). Su
   [`revolt/event-loop`](https://github.com/revoltphp/event-loop) installed (and,
   for Workerman v5's fiber loop, Workerman ≥ 5). It is gated at runtime via
   `class_exists()`, so on PHP 7 it simply stays off and you use callbacks.
-- **Development/test tooling requires PHP ≥ 8.1** (Pest 4, PHPStan 2). This only
-  affects contributors running the suite — it does **not** affect applications
-  that pull the package in as a dependency.
+- **Development/test tooling.** Dev dependencies are declared as version
+  **ranges** (not pins), so each PHP version resolves a compatible toolchain and
+  the suite runs from **PHP ≥ 7.2** up to 8.3:
+  - PHP **7.2 / 7.3 / 7.4** → PHPUnit 9 + Workerman 4 (CI strips
+    `phpstan/phpstan` and `revolt/event-loop` — which need newer PHP — before
+    `composer update`, and uses `phpunit9.xml.dist`).
+  - PHP **8.1 / 8.2 / 8.3** → PHPUnit 12 + Workerman 5 (uses `phpunit.xml.dist`).
+
+  Running the suite does **not** affect applications that pull the package in as
+  a dependency — these are dev-only requirements.
 
 ## Install
 
@@ -451,8 +458,8 @@ Anything without a shortcut goes through the dispatcher directly, e.g.
 
 ```
 composer install
-composer test          # Pest
-composer analyze       # PHPStan
+composer test          # PHPUnit (phpunit --colors=always)
+composer analyze       # PHPStan (8.x only)
 composer test:coverage # merged subprocess coverage (sh bin/run-coverage.sh; needs PCOV or Xdebug)
 ```
 
@@ -463,18 +470,26 @@ continuous integration* below. Any change must stay green on **both** Dragonfly
 and Redis; a case that can only pass on one engine must be skipped with a logged
 reason via `skipOnBackend()` (never a silent skip) and listed under *Compatibility*.
 
-> The test/static-analysis toolchain (Pest 4, PHPStan 2) needs **PHP ≥ 8.1**.
-> The library itself runs on **PHP ≥ 7.2** in callback mode — the `>=8.1` dev
-> requirement only applies to running the suite, not to consuming the package.
+> The test suite runs on **PHP ≥ 7.2** (PHPUnit 9 + Workerman 4 on 7.x;
+> PHPUnit 12 + Workerman 5 on 8.1–8.3). PHPStan runs on the **8.x** legs only.
+> Coroutine mode (and its tests) needs **PHP ≥ 8.1** with `revolt/event-loop`;
+> the `CoroutineModeTest` cases self-skip below 8.1 via the
+> `coroutineSupported()` guard. The library itself runs on **PHP ≥ 7.2** in
+> callback mode.
+
+> **`composer.lock` is not committed.** This is a library, and the CI legs need
+> different dependency resolutions per PHP version, so the lockfile is
+> `.gitignore`d and CI runs `composer update` (never `composer install` against a
+> committed lock).
 
 ## Testing & continuous integration
 
-The fork ships with a [Pest](https://pestphp.com/) test suite run against **both
-Dragonfly and Redis** — **406 passed / 3 skipped on Dragonfly**, **409 passed /
-0 skipped on Redis** (the Redis leg is skip-free; the 3 Dragonfly skips are
-behaviour-gated server divergences — see *Compatibility* below). It is split into
-two tiers, so most of the code can be exercised without a server and the rest is
-verified end-to-end against a live engine:
+The fork ships with a [PHPUnit](https://phpunit.de/) test suite — **430 tests
+(145 Unit + 285 Feature)** — run against **both Dragonfly and Redis**. The Redis
+leg is skip-free; the only skips are behaviour-gated server divergences on
+Dragonfly (see *Compatibility* below). It is split into two tiers, so most of the
+code can be exercised without a server and the rest is verified end-to-end
+against a live engine:
 
 - **Unit suite (`tests/Unit/`) — no server needed.** Pure, mock-style tests that
   run anywhere:
@@ -519,7 +534,7 @@ per leg via the `REDIS_URL` + `REDIS_BACKEND` pair:
 helpers that detect-and-confirm a running engine on each port (`make help` lists
 every target). **Both engines must stay green.** A case that can only pass on one
 engine is skipped — never silently — with `skipOnBackend('redis', 'reason')` /
-`skipOnBackend('dragonfly', 'reason')` (free helpers in `tests/Pest.php`, keyed on
+`skipOnBackend('dragonfly', 'reason')` (free helpers in `tests/helpers.php`, keyed on
 `REDIS_BACKEND`); every skip prints `[<backend>] <reason>` and is documented under
 *Compatibility* below.
 
@@ -578,15 +593,23 @@ Redis too.
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and
 pull request to `master` (and on demand via `workflow_dispatch`):
 
-- **Matrix across PHP 8.1, 8.2, and 8.3 × backend `[dragonfly, redis]`**
-  (fail-fast disabled), so the full suite runs against **both engines** on every
-  push and PR — not just mocks, and not just Dragonfly.
+- **Matrix across PHP 7.2, 7.3, 7.4, 8.1, 8.2, and 8.3 × backend
+  `[dragonfly, redis]`** (12 legs, fail-fast disabled), so the full suite runs
+  against **both engines** on every push and PR — not just mocks, and not just
+  Dragonfly. The 7.x legs prove the advertised `>=7.2` floor: Composer resolves
+  **PHPUnit 9 + Workerman 4** there (using `phpunit9.xml.dist`), after the
+  install step strips `phpstan/phpstan` + `revolt/event-loop` so the platform
+  check can pick the older line; the 8.x legs resolve **PHPUnit 12 + Workerman
+  5** (`phpunit.xml.dist`). `composer.lock` is not committed — each leg runs
+  `composer update`.
 - **Each leg starts exactly one engine** on `127.0.0.1:6379` as a service
   container: the Dragonfly image
   (`docker.dragonflydb.io/dragonflydb/dragonfly`), or
   `redis/redis-stack-server:latest` on the Redis leg so the JSON / Bloom / CMS /
   TopK / FT modules are available there too.
-- **PHPStan + Pest** execute on every leg; the single
+- **PHPUnit** runs on every leg (**PHPStan** on the 8.x legs only); the
+  coroutine-mode tests self-skip below PHP 8.1 via the `coroutineSupported()`
+  guard and run only on the 8.1/8.2/8.3 legs. The single
   `php=8.3 && backend=dragonfly` leg additionally collects merged line coverage
   with **PCOV** (via `composer test:coverage`) and uploads a Clover report to
   **[Codecov](https://codecov.io/gh/detain/redis)** and

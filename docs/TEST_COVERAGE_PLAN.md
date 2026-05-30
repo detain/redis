@@ -41,7 +41,7 @@
 - **Unit tier** (`tests/Unit/`, binds `Tests\TestCase`, no server): `ProtocolTest` (17 cases, RESP round-trips + MAX_DEPTH boundary), `MethodSurfaceTest` (5 cases, reflection guards).
 - **Feature tier** (`tests/Feature/`, binds `Tests\RedisTestCase`, 22 files): every assertion runs inside a **Workerman event-loop subprocess** via the free function `runInWorker($snippet)` → `proc_open(php tests/Support/run-in-worker.php)`, result returned on fd 3. Covers SCAN family, JSON, Bloom, CMS, TopK, FT.SEARCH, HEXPIRE, bitmap/geo/eval-RO, monitor, pub/sub, unsubscribe family, server/admin, modern list/set/zset/stream verbs, rawCommand, quit.
 
-**CI** (`.github/workflows/ci.yml`, the *only* workflow): matrix `php: [8.1, 8.2, 8.3]`; **Dragonfly service container** on `6379`; `REDIS_URL=redis://127.0.0.1:6379`; PHPStan (`composer analyze`) + Pest; coverage (pcov) only on 8.3 → clover → Codecov + Codacy. Local dev: Dragonfly installed via APT (per project memory), currently serving on 6379.
+**CI** (`.github/workflows/ci.yml`, the *only* workflow): matrix `php: [8.1, 8.2, 8.3]`; **Dragonfly service container** on `6379`; `REDIS_URL=redis://127.0.0.1:6379`; PHPStan (`composer analyze`) + PHPUnit; coverage (pcov) only on 8.3 → clover → Codecov + Codacy. Local dev: Dragonfly installed via APT (per project memory), currently serving on 6379. *(This snapshot predates the dual-backend + PHP 7.2–8.3 matrix and the later PHPUnit conversion; see the README *Testing & continuous integration* section for the current CI shape.)*
 
 **Connection config:** everything reads `getenv('REDIS_URL') ?: 'redis://127.0.0.1:6379'` (in `TestCase::redisUrl()`, `runInWorker()`, and `run-in-worker.php`). There is **no `REDIS_HOST`/`REDIS_PORT`** split and **no backend-conditional skip** — a few tests assert "succeeds OR surfaces the wire error" to tolerate engine differences.
 
@@ -79,7 +79,7 @@ entirely untested** — the worker only runs callback mode.
 ### 3A. Measurement gaps (Track A — must fix first)
 - Subprocess coverage not collected → `Client.php` invisible. (Group 0.)
 - `composer test:coverage` enforces `--min=70` but would fail at 7.6%; CI side-steps
-  it by calling pest directly without `--min`. After the merge fix, wire a real floor.
+  it by calling phpunit directly without `--min`. After the merge fix, wire a real floor.
 
 ### 3B. `src/Protocols/Redis.php` — 84.8%, push to ~100% (in-process, easy wins)
 Uncovered lines (from the pcov run): **36, 62, 65, 70, 76, 79, 89, 100–102, 146,
@@ -135,7 +135,7 @@ Design decisions:
   per-engine red/green; clean isolation.
 - Locally, run two servers on different ports (Dragonfly `6379`, Redis `6380`) and
   expose `make test-dragonfly` / `make test-redis` / `make test-all`.
-- Add a small **backend-aware skip helper** (free function in `tests/Pest.php`,
+- Add a small **backend-aware skip helper** (free function in `tests/helpers.php`,
   e.g. `currentBackend()` reading a `REDIS_BACKEND` env, + `skipOnBackend('redis', 'reason')`)
   so a legitimately engine-specific case is skipped *with a logged reason*, never
   silently. Record every divergence in README "Compatibility".
@@ -162,7 +162,7 @@ Execute groups in order. Within a group, steps are sequential unless marked
   coverage around its `eval()` (pcov via `\pcov\start()/\pcov\collect()`, or a
   `SebastianBergmann\CodeCoverage` instance) and write a unique per-invocation
   `.cov` to a temp dir when a `COLLECT_COVERAGE`/`COVERAGE_DIR` env is set. Add a
-  parent-side collector (Pest `afterAll`/a small bin script) that merges all `.cov`
+  parent-side collector (a small bin script) that merges all `.cov`
   files and emits `coverage.xml` (clover) + an HTML/text summary. Verify
   `Client.php` jumps from 0% to its true value.
 - **0.2** *Add Redis to CI.* In `ci.yml` add a `redis:7` service and a
@@ -171,8 +171,8 @@ Execute groups in order. Within a group, steps are sequential unless marked
   leg only.
 - **0.3** *Local dual-backend.* Add `scripts/start-redis.sh` (redis-server on 6380),
   a `Makefile` (`test-dragonfly`, `test-redis`, `test-all`, `coverage`), and the
-  `currentBackend()`/`skipOnBackend()` helpers in `tests/Pest.php` (free functions —
-  honor the project's no-`@var $this`-in-Pest-closures rule).
+  `currentBackend()`/`skipOnBackend()` helpers in `tests/helpers.php` (free functions —
+  honor the project's no-`@var $this`-in-test-bodies rule).
 - **0.4** *Coverage floor (DECIDED: enforce).* Once merge works, wire a real `--min`
   into CI — start at the measured merged baseline and ratchet upward each group;
   CI must fail below the floor. Make `composer test:coverage` the canonical gate
@@ -263,8 +263,8 @@ for each STEP in the active GROUP (sequential unless marked parallel-safe):
   1. IMPLEMENT
      └─ spawn  coder sub-agent  (synchronous; Edit/Write/Bash)
         input:  this step's scope + the §3 gap analysis + §3/§5 checks
-                + project rules (Pest; no `@var $this` in closures, use free
-                  helpers in tests/Pest.php; RESP/dual-mode details; git ritual)
+                + project rules (PHPUnit; no `@var $this` in test bodies, use free
+                  helpers in tests/helpers.php; RESP/dual-mode details; git ritual)
         action: implement tests / infra; run `make test-all` (BOTH backends)
                 AND merged coverage until green locally.
         output: files changed + test results for BOTH engines + coverage delta.
@@ -452,8 +452,8 @@ The residual set is:
 These remainders are connection/socket fault paths, auto-reconnect timing,
 diagnostic `echo` sinks, two structurally-dead lines (2599/2600), and
 coroutine-only error arms whose logic is already proven in callback mode. The
-`--min` floor in `bin/run-coverage.sh` is set to **87** — ~2.8pt below the
-achieved merged total of 89.83% (Client.php 88.74%), leaving headroom for the
+`--min` floor in `bin/run-coverage.sh` is set to **90** — a few points below the
+achieved merged total of ~92.99% (Client.php 92.32%), leaving headroom for the
 minor subprocess-dump merge nondeterminism the floor comment has always
 anticipated (merging many per-worker `cov-*.cov` partials can shift a Unit-only
 line or two — e.g. an `echo`-sink default arm — between runs; a coverage-tooling

@@ -10,7 +10,7 @@
 | unqualified inside test bodies (e.g. coroutineSupported(), runInWorker()).
 |
 | Free functions (not RedisTestCase methods) because the project forbids the
-| `@var $this` workaround in test closures on PHP 8.1 / phpstan 2.x.
+| `@var $this` workaround in test bodies on PHP 8.1 / phpstan 2.x.
 |
 */
 
@@ -18,7 +18,7 @@
  * The engine the current run targets, lower-cased.
  *
  * Set by the Makefile (`REDIS_BACKEND=dragonfly|redis`). Falls back to
- * 'unknown' when running pest directly without the env var.
+ * 'unknown' when running phpunit directly without the env var.
  *
  * @return string e.g. 'dragonfly', 'redis', or 'unknown'
  */
@@ -83,10 +83,10 @@ function skipTest(string $reason): void
 | with Workerman's startup banner on stdout.
 |
 | Exposed as a free function instead of a method on RedisTestCase so
-| PHPStan doesn't have to reason about $this inside Pest's bound test
-| closures — on PHP 8.1 / phpstan 2.x the `@var $this` workaround
-| produces "Variable $this in PHPDoc tag @var does not match assigned
-| variable $result" errors. Free function side-steps that entirely.
+| PHPStan doesn't have to reason about $this inside test bodies — on
+| PHP 8.1 / phpstan 2.x the `@var $this` workaround produces "Variable
+| $this in PHPDoc tag @var does not match assigned variable $result"
+| errors. Free function side-steps that entirely.
 |
 | @param  string  $snippet  PHP code (no <?php tag) executed inside the
 |                           subprocess after the worker boots. Has
