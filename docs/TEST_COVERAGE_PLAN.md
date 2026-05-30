@@ -22,6 +22,13 @@
 > Dragonfly (201 passed / 0 skipped) and Redis (196 passed / 5 skipped), and a
 > coverage floor gate (min 65, ratcheting toward 95) is enforced in CI. See the
 > README *Testing & continuous integration* section for the user-facing writeup.
+>
+> **Final state (Groups 0–9 complete):** merged total **92.99%** (969/1042),
+> `Client.php` **92.32%** (877/950), `Protocols/Redis.php` and `Exception.php`
+> **100%**; suite Dragonfly **406 passed / 3 skipped** and Redis **409 passed /
+> 0 skipped** (Redis leg skip-free); coverage floor now **90**. The Group-0-era
+> figures above are an interim baseline — see *Coverage close-out (Group 9)* at
+> the end of this document for the final numbers and the documented residual.
 
 | Source file | Lines | Real coverage today | Notes |
 |---|---|---|---|
@@ -330,12 +337,15 @@ after ALL steps in the GROUP pass:
 
 ## Coverage close-out (Group 9)
 
-Group 9 pushed `src/Client.php` from **81.16%** (771/950, 179 uncovered) to
-**88.74%** (843/950) and the merged total from **82.82%** to **89.83%**
-(935/1042) — a reduction of the unique-uncovered Client.php line set from ~179
-to ~60. Per-engine: Dragonfly **407 passed / 3 skipped**, Redis **410 passed /
-0 skipped** (the Dragonfly skips are the pre-existing, documented engine
-divergences — AUTH-with-no-password etc. — not new).
+Group 9 pushed `src/Client.php` from **81.16%** (771/950, 179 uncovered) to a
+final **92.32%** (877/950; methods **91.06%**, 112/123) and the merged total from
+**82.82%** to a final **92.99%** (969/1042), with `Protocols/Redis.php` and
+`Exception.php` at **100%** — and the coverage floor was ratcheted to **90**.
+(An intermediate checkpoint in this group sat at Client.php 88.74% / total 89.83%
+before the remaining targeted cases landed.) Per-engine final results: Dragonfly
+**406 passed / 3 skipped**, Redis **409 passed / 0 skipped** (the Dragonfly skips
+are the pre-existing, documented engine divergences — AUTH-with-no-password ×2 and
+OBJECT-unknown-on-Dragonfly — not new; the Redis leg is skip-free).
 
 ### Tests added
 - `tests/Unit/ClientShapingTier9Test.php` — in-process, no event loop

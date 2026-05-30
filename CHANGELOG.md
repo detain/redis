@@ -31,7 +31,8 @@ coroutine) are supported throughout.
 | **Broken `__call()` paths fixed** | No-arg-plus-callback commands (`ping`, `info`, `quit`, …), underscore verbs (`SORT_RO`, `EVAL_RO`, …), dotted module verbs (`JSON.*`, `BF.*`, …), and `rawCommand` all got explicit methods that route correctly. |
 | **New command coverage** | ~140 commands documented/implemented across Strings, Keys, Hashes, Lists, Sets, Sorted Sets, Streams, Pub/Sub, Bitmap, Geo, Scripting, Server admin, and the JSON / Bloom / CMS / TopK / RediSearch modules. |
 | **Pub/Sub** | Sharded pub/sub (`sPublish`/`sSubscribe`), the full `unsubscribe`/`pUnsubscribe`/`sUnsubscribe` teardown family, and `monitor()` streaming. |
-| **Tooling** | Pest test harness (unit + subprocess-based integration), PHPStan with baseline, GitHub Actions CI on PHP 8.1/8.2/8.3 against live Dragonfly, Codecov + Codacy coverage. |
+| **Tooling** | Pest test harness (unit + subprocess-based integration), PHPStan with baseline, GitHub Actions CI on PHP 8.1/8.2/8.3, Codecov + Codacy coverage. |
+| **Test/coverage build-out** | Suite now runs against **both engines** — Dragonfly **406 passed / 3 skipped** and Redis **409 passed / 0 skipped** — via Workerman subprocess-coverage merge; **~93% merged line coverage** (`Client.php` 92.32%, `Protocols/Redis.php` 100%) behind a CI-enforced coverage floor of **90**. |
 | **Requirements** | PHP bumped from `>=7` to `>=8.1`. |
 
 ---

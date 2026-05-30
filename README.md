@@ -470,10 +470,11 @@ reason via `skipOnBackend()` (never a silent skip) and listed under *Compatibili
 ## Testing & continuous integration
 
 The fork ships with a [Pest](https://pestphp.com/) test suite run against **both
-Dragonfly and Redis** — **201 passed / 0 skipped on Dragonfly**, **196 passed /
-5 skipped on Redis** (the 5 skips are the RediSearch FT family; see
-*Compatibility* below). It is split into two tiers, so most of the code can be
-exercised without a server and the rest is verified end-to-end against a live engine:
+Dragonfly and Redis** — **406 passed / 3 skipped on Dragonfly**, **409 passed /
+0 skipped on Redis** (the Redis leg is skip-free; the 3 Dragonfly skips are
+behaviour-gated server divergences — see *Compatibility* below). It is split into
+two tiers, so most of the code can be exercised without a server and the rest is
+verified end-to-end against a live engine:
 
 - **Unit suite (`tests/Unit/`) — no server needed.** Pure, mock-style tests that
   run anywhere:
@@ -493,6 +494,10 @@ exercised without a server and the rest is verified end-to-end against a live en
   CMS / TopK / RediSearch modules — has live round-trip coverage. The suite
   **skips cleanly** when no server is reachable, so `composer test` stays green
   on a bare checkout.
+  - **Revolt coroutine mode.** A second worker variant
+    (`tests/Support/run-in-worker-coroutine.php`) runs the same snippets under a
+    Revolt event loop so the fiber-suspend (`await`) path through `Client.php` is
+    exercised end-to-end alongside the default callback mode.
 
 Static analysis runs alongside the tests: **PHPStan** (level 5, with a baseline
 that freezes legacy typing issues so new code can't regress).
@@ -533,23 +538,40 @@ With the merge in place the real numbers are:
 
 | File | Line coverage |
 |------|---------------|
-| `src/Client.php` | **~66.5%** (632/950) |
-| `src/Protocols/Redis.php` | **~90.2%** |
-| **Total** | **~68.6%** (715/1042) |
+| `src/Client.php` | **92.32%** (877/950 lines; 91.06% of methods, 112/123) |
+| `src/Protocols/Redis.php` | **100%** |
+| `src/Exception.php` | **100%** |
+| **Total** | **92.99%** (969/1042) |
 
-`bin/merge-coverage.php` enforces a **coverage floor** (`--min` / `COVERAGE_MIN`)
-and exits non-zero below it; the floor starts at **65** and is ratcheted toward
-95 over time. This is the canonical gate — CI fails below it.
+A Revolt coroutine-mode worker variant (`run-in-worker-coroutine.php`) re-runs the
+Feature snippets under a fiber event loop so the coroutine `await` path is merged
+into the same numbers.
+
+`bin/merge-coverage.php` enforces a **coverage floor** (`--min` / `COVERAGE_MIN`,
+default set in `bin/run-coverage.sh`) and exits non-zero below it; the floor is
+currently **90**. This is the canonical gate — CI fails below it.
+
+The residual ~7% is documented as genuinely impractical to cover (socket fault
+injection, `onClose` auto-reconnect timing, `onMessage` exception/reconnect,
+echo-`Exception` diagnostic sinks, and the coroutine `*ScanAll` error arms) — see
+*Coverage close-out (Group 9)* in [`docs/TEST_COVERAGE_PLAN.md`](docs/TEST_COVERAGE_PLAN.md).
 
 ### Compatibility
 
 The suite is green on both engines except for documented, server-side divergences
 that are skipped on the affected backend with a logged reason (`skipOnBackend`),
-never silently:
+never silently. The **Redis leg is skip-free (0 skips)**; the only remaining
+divergences are **3 Dragonfly behaviour-gated skips**:
 
 | Skipped on | Tests | Reason |
 |------------|-------|--------|
-| Redis | `tests/Feature/FtSearchTest.php` — `ftSearch`, `ftInfo`, `ftDropIndex`, `ftAggregate`, plus the index-lifecycle case (5 total) | On the RediSearch build under test, `FT.CREATE` returns `+OK` and `FT._LIST` shows the index, but `FT.SEARCH`/`FT.AGGREGATE` reply `SEARCH_INDEX_NOT_FOUND` (the index is listed but not queryable) — reproducible with raw `redis-cli`. The FT family is fully covered on Dragonfly. |
+| Dragonfly | auth-with-no-password (2 cases) | `AUTH` against a server with no password configured returns `+OK` on Dragonfly instead of the `-ERR` Redis returns, so the error-path assertion is gated off there. |
+| Dragonfly | `OBJECT` subcommand | `OBJECT` (e.g. `OBJECT ENCODING`/`REFCOUNT`) is reported as an unknown command on the Dragonfly build under test. |
+
+The RediSearch **FT family runs in full on both engines** — the earlier
+`FT.SEARCH` `SEARCH_INDEX_NOT_FOUND` divergence no longer reproduces on the
+current Redis 8.8 + RediSearch build, so those tests were un-gated and now run on
+Redis too.
 
 ### GitHub Actions
 
@@ -573,11 +595,11 @@ pull request to `master` (and on demand via `workflow_dispatch`):
   fails the run below the minimum (see *Coverage* above).
 - Composer downloads are cached per PHP version to keep runs fast.
 
-Current merged coverage is **~68.6%** total (`Client.php` ~66.5%,
-`Protocols/Redis.php` ~90.2%) — the subprocess-merge fix surfaced the real
-end-to-end numbers that pcov in the parent process used to miss. The floor is
-ratcheted toward 95% as coverage grows. Coverage badges at the top of this README
-reflect the latest `master` run.
+Current merged coverage is **92.99%** total (`Client.php` 92.32%,
+`Protocols/Redis.php` 100%) — the subprocess-merge fix surfaced the real
+end-to-end numbers that pcov in the parent process used to miss. The floor is held
+at **90** and ratcheted upward as coverage grows. Coverage badges at the top of
+this README reflect the latest `master` run.
 
 ## Documentation
 
