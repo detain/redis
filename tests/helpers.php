@@ -44,14 +44,14 @@ function skipOnBackend(string $backend, string $reason): void
 {
     $backend = strtolower($backend);
     if (currentBackend() === $backend) {
-        // Throw the same exception PHPUnit's markTestSkipped() raises. Using a
-        // free function (not $this->markTestSkipped() / test()->...) keeps this
-        // PHPStan-clean: test() returns a TestCall|HigherOrderTapProxy union on
-        // which markTestSkipped() is not declared, and the project forbids
-        // @var $this PHPDoc in Pest closures. The exception is the public,
-        // documented skip mechanism and PHPUnit reports it as a skip with the
-        // message, so the reason stays visible in the output.
-        throw new \PHPUnit\Framework\SkippedWithMessageException("[{$backend}] {$reason}");
+        // Use the static Assert::markTestSkipped() rather than throwing a skip
+        // exception class directly: the concrete class differs across PHPUnit
+        // majors (SkippedWithMessageException on 10-12, SkippedTestError on 9,
+        // which the PHP 7.x legs resolve), but the static helper exists in all
+        // of them and throws the version-appropriate exception. A free function
+        // (not $this->markTestSkipped()) keeps the skip callable unqualified
+        // from any test body. The reason is surfaced, prefixed with the backend.
+        \PHPUnit\Framework\Assert::markTestSkipped("[{$backend}] {$reason}");
     }
 }
 
@@ -60,15 +60,15 @@ function skipOnBackend(string $backend, string $reason): void
  *
  * For divergences gated on OBSERVED runtime behaviour rather than the backend
  * name (e.g. "skip if the server accepted AUTH with no password set") — the
- * caller decides when to invoke it. Same PHPStan-clean exception mechanism as
- * skipOnBackend() (test()->markTestSkipped() trips method.notFound on Pest's
- * TestCall union, and the project forbids @var $this in closures).
+ * caller decides when to invoke it. Same cross-version skip mechanism as
+ * skipOnBackend(): the static Assert::markTestSkipped() throws the
+ * PHPUnit-major-appropriate skip exception (9 vs 10-12).
  *
  * @param string $reason Why this case is being skipped; surfaced in output.
  */
 function skipTest(string $reason): void
 {
-    throw new \PHPUnit\Framework\SkippedWithMessageException($reason);
+    \PHPUnit\Framework\Assert::markTestSkipped($reason);
 }
 
 /*

@@ -12,12 +12,16 @@ permissions:
 
 jobs:
   test:
-    name: Pest + PHPStan (PHP ${{ matrix.php }} / ${{ matrix.backend }})
+    name: PHPUnit + PHPStan (PHP ${{ matrix.php }} / ${{ matrix.backend }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.1', '8.2', '8.3']
+        # 7.2/7.3/7.4 prove the advertised `php: ">=7.2"` floor: there
+        # composer resolves PHPUnit 9 + Workerman 4 (the dev deps that gate
+        # the floor — phpstan, revolt — are stripped in the install step).
+        # 8.1/8.2/8.3 resolve the newest of everything (PHPUnit 12, Workerman 5).
+        php: ['7.2', '7.3', '7.4', '8.1', '8.2', '8.3']
         # Run the full suite against BOTH engines. The redis leg uses
         # redis-stack-server so JSON/BF/CMS/TopK/FT module commands run there too.
         backend: [dragonfly, redis]
@@ -90,23 +94,45 @@ jobs:
             ${{ runner.os }}-php-${{ matrix.php }}-composer-
 
       - name: Install Composer dependencies
-        run: composer install --prefer-dist --no-progress --no-interaction
+        # No composer.lock in the repo (it's a library; legs need different
+        # resolutions), so always `composer update`. On PHP < 8.1 first strip
+        # the dev deps that gate the floor — phpstan/phpstan needs >=7.4 and
+        # revolt/event-loop needs >=8.1 — so Composer's platform check can
+        # auto-select PHPUnit 9 + Workerman 4. No version is hard-pinned.
+        run: |
+          case "${{ matrix.php }}" in
+            7.*)
+              composer remove --dev --no-update phpstan/phpstan revolt/event-loop
+              ;;
+          esac
+          composer update --prefer-dist --no-progress --no-interaction
 
       - name: Run PHPStan
+        # PHPStan 2 won't install on 7.x (and only needs to run once); gate it
+        # to 8.x. It was stripped from the dev set on the 7.x legs above.
+        if: ${{ !startsWith(matrix.php, '7.') }}
         run: composer analyze
 
-      # Coverage runs on exactly ONE leg (php=8.3 && backend=dragonfly) via the
-      # merge pipeline, which captures Client.php (subprocess coverage). Every
-      # other leg runs the plain Pest suite.
-      - name: Run Pest
-        if: ${{ !(matrix.php == '8.3' && matrix.backend == 'dragonfly') }}
-        run: vendor/bin/pest --colors=never
+      # Test execution. Coverage runs on exactly ONE leg (php=8.3 &&
+      # backend=dragonfly) via the merge pipeline, which captures Client.php
+      # (subprocess coverage). The 7.x legs use the PHPUnit-9 config
+      # (phpunit9.xml.dist: <coverage><include>, no cacheDirectory); the 8.x
+      # non-coverage legs use the default config (phpunit.xml.dist, PHPUnit 10+).
+      # Coroutine tests self-skip below 8.1 via the coroutineSupported() guard,
+      # so no CI-level exclusion is needed.
+      - name: Run PHPUnit (PHP 7.x, PHPUnit 9 config)
+        if: ${{ startsWith(matrix.php, '7.') }}
+        run: vendor/bin/phpunit -c phpunit9.xml.dist --colors=never
 
-      - name: Run Pest with merged coverage (canonical floor gate)
+      - name: Run PHPUnit (PHP 8.x, non-coverage legs)
+        if: ${{ !startsWith(matrix.php, '7.') && !(matrix.php == '8.3' && matrix.backend == 'dragonfly') }}
+        run: vendor/bin/phpunit --colors=never
+
+      - name: Run PHPUnit with merged coverage (canonical floor gate)
         if: ${{ matrix.php == '8.3' && matrix.backend == 'dragonfly' }}
         # composer test:coverage runs bin/run-coverage.sh -> merge-coverage.php
         # --min=<floor>, which produces coverage.xml AND fails the build if the
-        # merged total line coverage drops below the floor (initial 65).
+        # merged total line coverage drops below the floor (currently 90).
         run: composer test:coverage
 
       - name: Upload coverage artifact
@@ -122,7 +148,7 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
-          flags: pest
+          flags: phpunit
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
