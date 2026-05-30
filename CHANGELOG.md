@@ -31,9 +31,49 @@ coroutine) are supported throughout.
 | **Broken `__call()` paths fixed** | No-arg-plus-callback commands (`ping`, `info`, `quit`, …), underscore verbs (`SORT_RO`, `EVAL_RO`, …), dotted module verbs (`JSON.*`, `BF.*`, …), and `rawCommand` all got explicit methods that route correctly. |
 | **New command coverage** | ~140 commands documented/implemented across Strings, Keys, Hashes, Lists, Sets, Sorted Sets, Streams, Pub/Sub, Bitmap, Geo, Scripting, Server admin, and the JSON / Bloom / CMS / TopK / RediSearch modules. |
 | **Pub/Sub** | Sharded pub/sub (`sPublish`/`sSubscribe`), the full `unsubscribe`/`pUnsubscribe`/`sUnsubscribe` teardown family, and `monitor()` streaming. |
-| **Tooling** | Pest test harness (unit + subprocess-based integration), PHPStan with baseline, GitHub Actions CI on PHP 8.1/8.2/8.3, Codecov + Codacy coverage. |
-| **Test/coverage build-out** | Suite now runs against **both engines** — Dragonfly **406 passed / 3 skipped** and Redis **409 passed / 0 skipped** — via Workerman subprocess-coverage merge; **~93% merged line coverage** (`Client.php` 92.32%, `Protocols/Redis.php` 100%) behind a CI-enforced coverage floor of **90**. |
-| **Requirements** | PHP bumped from `>=7` to `>=8.1`. |
+| **Tooling** | PHPUnit test harness (unit + subprocess-based integration), PHPStan with baseline, GitHub Actions CI on PHP 7.2/7.3/7.4/8.1/8.2/8.3/8.5 × {Dragonfly, Redis}, Codecov + Codacy coverage. |
+| **Test/coverage build-out** | Suite runs against **both engines** — **430 tests** (145 unit + 285 feature), Dragonfly 3-skipped / Redis 0-skipped — via Workerman subprocess-coverage merge; **~93% merged line coverage** (`Client.php` 92.44%, `Protocols/Redis.php` 100%) behind a CI-enforced coverage floor of **90**. |
+| **Requirements** | `require` stays `php: >=7.2` and `workerman: ^4.1.0 \|\| ^5.0.0` (== upstream); the PHP 7.2/7.3/7.4 CI legs continuously prove the `>=7.2` floor. |
+
+---
+
+### Changed — Test framework (Pest → PHPUnit) + PHP 7.x CI floor
+
+Replaced Pest with PHPUnit and added PHP 7.2/7.3/7.4 CI legs that actually run
+the converted suite, so the advertised `php: ">=7.2"` floor is continuously
+proven. No loss of tests or coverage.
+
+- **Pest → PHPUnit.** All 43 test files (8 unit, 35 feature) converted to
+  global-namespace `final` classes; `it()` closures became `test_*` methods and
+  every Pest matcher was mapped to its PHPUnit assertion (operand order flipped).
+  Per-file reflection helpers and the `runInWorker()` subprocess heredoc bodies
+  were preserved verbatim. **430 tests / ~1150 assertions**, no silent drops;
+  merged line coverage holds at **93.09%** (floor 90). Pest, `tests/Pest.php`,
+  and the unused `mockery/mockery` dev dep were removed; the global test helpers
+  moved to `tests/helpers.php`.
+- **Cross-version dev tooling (ranges, not pins).** `require-dev` now declares
+  `phpunit/phpunit: "^8.5 || ^9.6 || ^10.5 || ^11.5 || ^12.0"`. Each PHP version
+  resolves a compatible runner: **7.2 → PHPUnit 8.5**, **7.3/7.4 → 9.6**,
+  **8.1+ → 10–12**. On the 7.x legs CI strips `phpstan/phpstan` (needs ≥7.4) and
+  `revolt/event-loop` (needs ≥8.1) before `composer update`, so Workerman
+  resolves to v4 there. A second config `phpunit9.xml.dist` (testsuites + env
+  only, no `<coverage>`) is used by the 7.x legs and validates under PHPUnit
+  8.5 and 9 alike.
+- **PHP 7.2 test-suite compatibility.** Downconverted 17 arrow functions
+  (`fn () =>`, PHP 7.4+) to closures; rewrote the `ProtocolTest`
+  `ConnectionInterface` stub to 7.1-safe signatures (`mixed`/`bool|null` →
+  untyped params / `?bool`) that stay LSP-compatible with both Workerman v4
+  (untyped) and v5 (typed); and routed the `skipOnBackend()`/`skipTest()`
+  helpers through `Assert::markTestSkipped()` (the PHPUnit-10+
+  `SkippedWithMessageException` class does not exist in PHPUnit 8.5/9).
+- **CI matrix** is now `{7.2, 7.3, 7.4, 8.1, 8.2, 8.3, 8.5} × {Dragonfly,
+  Redis}`. PHPStan runs on the 8.x legs only; coverage + the floor gate run on
+  exactly one leg (`8.3 + Dragonfly`). `composer.lock` is not committed (it's a
+  library; the legs need different resolutions), so CI uses `composer update`.
+  Coroutine-mode tests self-skip below PHP 8.1 via the `coroutineSupported()`
+  guard. Pinned actions bumped (`checkout@v6`, `cache@v5`) and
+  `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` set to clear the Node 20 deprecation
+  warnings.
 
 ---
 
