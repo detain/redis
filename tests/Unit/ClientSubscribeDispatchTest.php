@@ -97,7 +97,7 @@ final class ClientSubscribeDispatchTest extends \Tests\TestCase
         subSet($client, '_error', 'boom-subscribe');
         $wrapper = subWrapper($client);
 
-        $out = captureEcho(fn () => $wrapper(false));
+        $out = captureEcho(function () use ($wrapper) { return $wrapper(false); });
 
         $this->assertSame('boom-subscribe', $out);
         $this->assertFalse($userCalled);
@@ -113,7 +113,7 @@ final class ClientSubscribeDispatchTest extends \Tests\TestCase
         subSet($client, '_error', 'boom-psub');
         $wrapper = subWrapper($client);
 
-        $out = captureEcho(fn () => $wrapper(false));
+        $out = captureEcho(function () use ($wrapper) { return $wrapper(false); });
 
         $this->assertSame('boom-psub', $out);
         $this->assertFalse($userCalled);
@@ -129,7 +129,7 @@ final class ClientSubscribeDispatchTest extends \Tests\TestCase
         subSet($client, '_error', 'boom-ssub');
         $wrapper = subWrapper($client);
 
-        $out = captureEcho(fn () => $wrapper(false));
+        $out = captureEcho(function () use ($wrapper) { return $wrapper(false); });
 
         $this->assertSame('boom-ssub', $out);
         $this->assertFalse($userCalled);
@@ -233,7 +233,7 @@ final class ClientSubscribeDispatchTest extends \Tests\TestCase
         $client->subscribe('chan', function () {});
         $wrapper = subWrapper($client);
 
-        $out = captureEcho(fn () => $wrapper(['bogus-type', 'x']));
+        $out = captureEcho(function () use ($wrapper) { return $wrapper(['bogus-type', 'x']); });
 
         $this->assertStringContainsString('unknow response type for subscribe', $out);
         $this->assertStringContainsString('buffer:', $out);
@@ -245,7 +245,7 @@ final class ClientSubscribeDispatchTest extends \Tests\TestCase
         $client->pSubscribe('p*', function () {});
         $wrapper = subWrapper($client);
 
-        $out = captureEcho(fn () => $wrapper(['bogus-type', 'x']));
+        $out = captureEcho(function () use ($wrapper) { return $wrapper(['bogus-type', 'x']); });
 
         $this->assertStringContainsString('unknow response type for psubscribe', $out);
     }
@@ -256,7 +256,7 @@ final class ClientSubscribeDispatchTest extends \Tests\TestCase
         $client->sSubscribe('chan', function () {});
         $wrapper = subWrapper($client);
 
-        $out = captureEcho(fn () => $wrapper(['bogus-type', 'x']));
+        $out = captureEcho(function () use ($wrapper) { return $wrapper(['bogus-type', 'x']); });
 
         $this->assertStringContainsString('unknow response type for ssubscribe', $out);
     }
@@ -272,8 +272,8 @@ final class ClientSubscribeDispatchTest extends \Tests\TestCase
 
         // Every subscribe-family entry point routes through assertNoActiveStream();
         // with a SUBSCRIBE already queued, streamActiveOrPending() is true.
-        $this->assertThrows(\Workerman\Redis\Exception::class, 'active or pending', fn () => $client->subscribe('other', function () {}));
-        $this->assertThrows(\Workerman\Redis\Exception::class, 'one stream per', fn () => $client->pSubscribe('p*', function () {}));
-        $this->assertThrows(\Workerman\Redis\Exception::class, null, fn () => $client->sSubscribe('s', function () {}));
+        $this->assertThrows(\Workerman\Redis\Exception::class, 'active or pending', function () use ($client) { return $client->subscribe('other', function () {}); });
+        $this->assertThrows(\Workerman\Redis\Exception::class, 'one stream per', function () use ($client) { return $client->pSubscribe('p*', function () {}); });
+        $this->assertThrows(\Workerman\Redis\Exception::class, null, function () use ($client) { return $client->sSubscribe('s', function () {}); });
     }
 }

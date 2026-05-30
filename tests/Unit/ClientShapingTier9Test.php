@@ -213,7 +213,7 @@ final class ClientShapingTier9Test extends \Tests\TestCase
     {
         $client = t9Client();
 
-        $this->assertThrows(\InvalidArgumentException::class, 'non-empty field => value message', fn () => $client->xAdd('s', '*', []));
+        $this->assertThrows(\InvalidArgumentException::class, 'non-empty field => value message', function () use ($client) { return $client->xAdd('s', '*', []); });
         $this->assertSame([], t9Prop($client, '_queue'));
     }
 

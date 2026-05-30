@@ -50,7 +50,7 @@ final class ScanTest extends \Tests\RedisTestCase
     {
         $result = runInWorker(<<<'PHP'
             $prefix = 'pest:scan:t2:';
-            $keys = array_map(fn ($i) => $prefix.'k'.$i, range(1, 50));
+            $keys = array_map(function ($i) use ($prefix) { return $prefix.'k'.$i; }, range(1, 50));
             $redis->del(...$keys);
             $remaining = count($keys);
             foreach ($keys as $k) {
@@ -115,7 +115,7 @@ final class ScanTest extends \Tests\RedisTestCase
     {
         $result = runInWorker(<<<'PHP'
             $prefix = 'pest:scanall:t4:';
-            $keys = array_map(fn ($i) => $prefix.'k'.$i, range(1, 200));
+            $keys = array_map(function ($i) use ($prefix) { return $prefix.'k'.$i; }, range(1, 200));
             $redis->del(...$keys);
             $remaining = count($keys);
             foreach ($keys as $k) {
@@ -142,7 +142,7 @@ final class ScanTest extends \Tests\RedisTestCase
     {
         $result = runInWorker(<<<'PHP'
             $prefix = 'pest:scanall:t5:';
-            $keys = array_map(fn ($i) => $prefix.'k'.$i, range(1, 200));
+            $keys = array_map(function ($i) use ($prefix) { return $prefix.'k'.$i; }, range(1, 200));
             $redis->del(...$keys);
             $remaining = count($keys);
             foreach ($keys as $k) {
@@ -207,7 +207,7 @@ final class ScanTest extends \Tests\RedisTestCase
             // Populate enough keys to make a non-zero cursor very likely on the
             // first SCAN with a small COUNT hint.
             $prefix = 'pest:scan:cursor:';
-            $keys = array_map(fn ($i) => $prefix.'k'.$i, range(1, 100));
+            $keys = array_map(function ($i) use ($prefix) { return $prefix.'k'.$i; }, range(1, 100));
             $redis->del(...$keys);
             $remaining = count($keys);
             foreach ($keys as $k) {
@@ -270,7 +270,7 @@ final class ScanTest extends \Tests\RedisTestCase
     {
         $result = runInWorker(<<<'PHP'
             $prefix = 'pest:scanall:boundary:';
-            $keys = array_map(fn ($i) => $prefix.'k'.$i, range(1, 30));
+            $keys = array_map(function ($i) use ($prefix) { return $prefix.'k'.$i; }, range(1, 30));
             $redis->del(...$keys);
             $remaining = count($keys);
             foreach ($keys as $k) {

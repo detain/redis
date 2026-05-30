@@ -221,7 +221,7 @@ final class ClientCommandShapingTest extends \Tests\TestCase
     {
         $client = shapingClient();
 
-        $this->assertThrows(\InvalidArgumentException::class, 'rawCommand requires at least the command name', fn () => $client->rawCommand());
+        $this->assertThrows(\InvalidArgumentException::class, 'rawCommand requires at least the command name', function () use ($client) { return $client->rawCommand(); });
     }
 
     public function test_rawcommand_throws_invalidargumentexception_when_only_a_callable_is_passed(): void
@@ -229,7 +229,7 @@ final class ClientCommandShapingTest extends \Tests\TestCase
         // The callable is popped first, leaving zero args -> the empty check fires.
         $client = shapingClient();
 
-        $this->assertThrows(\InvalidArgumentException::class, null, fn () => $client->rawCommand(function () {}));
+        $this->assertThrows(\InvalidArgumentException::class, null, function () use ($client) { return $client->rawCommand(function () {}); });
 
         // And nothing was queued.
         $this->assertSame([], shapingProp($client, '_queue'));
