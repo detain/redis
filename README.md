@@ -470,13 +470,13 @@ continuous integration* below. Any change must stay green on **both** Dragonfly
 and Redis; a case that can only pass on one engine must be skipped with a logged
 reason via `skipOnBackend()` (never a silent skip) and listed under *Compatibility*.
 
-> The test suite runs on **PHP ≥ 7.2** (PHPUnit 9 + Workerman 4 on 7.x;
-> PHPUnit 12 + Workerman 5 on 8.1–8.3). PHPStan runs on the **8.x** legs only.
-> Coroutine mode (and its tests) needs **PHP ≥ 8.1** with `revolt/event-loop`;
-> the `CoroutineModeTest` cases self-skip below 8.1 via the
+> The test suite runs on **PHP ≥ 7.2** (PHPUnit 8.5 on 7.2, 9.6 on 7.3/7.4,
+> all with Workerman 4; PHPUnit 12 + Workerman 5 on 8.1–8.5). PHPStan runs on
+> the **8.x** legs only. Coroutine mode (and its tests) needs **PHP ≥ 8.1** with
+> `revolt/event-loop`; the `CoroutineModeTest` cases self-skip below 8.1 via the
 > `coroutineSupported()` guard. The library itself runs on **PHP ≥ 7.2** in
 > callback mode.
-
+>
 > **`composer.lock` is not committed.** This is a library, and the CI legs need
 > different dependency resolutions per PHP version, so the lockfile is
 > `.gitignore`d and CI runs `composer update` (never `composer install` against a
