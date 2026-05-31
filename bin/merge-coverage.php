@@ -30,7 +30,7 @@
  * floor, printing both the achieved % and the floor. This is the canonical gate
  * for both local `make coverage` and CI — it runs on the MERGED number, which is
  * the only meaningful figure given the subprocess coverage model (a plain
- * `pest --min` can't see Client.php; see Step 0.1).
+ * `phpunit --min` can't see Client.php; see Step 0.1).
  *
  * Exits non-zero (loudly) when no *.cov files are found (code 2) or coverage is
  * below the floor (code 3).

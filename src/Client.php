@@ -2313,7 +2313,7 @@ class Client
         if (!empty($pathsAndCb) && \is_callable(\end($pathsAndCb))) {
             $cb = \array_pop($pathsAndCb);
         }
-        $args = ['GET', $key, ...$pathsAndCb, $cb];
+        $args = \array_merge(['GET', $key], $pathsAndCb, [$cb]);
         return $this->json(...$args);
     }
 
@@ -2331,7 +2331,7 @@ class Client
             $cb = $path;
             $path = '$';
         }
-        $args = ['MGET', ...$keys, $path, $cb];
+        $args = \array_merge(['MGET'], $keys, [$path, $cb]);
         return $this->json(...$args);
     }
 
@@ -2470,7 +2470,7 @@ class Client
         if (!empty($valuesAndCb) && \is_callable(\end($valuesAndCb))) {
             $cb = \array_pop($valuesAndCb);
         }
-        $args = ['ARRAPPEND', $key, $path, ...$valuesAndCb, $cb];
+        $args = \array_merge(['ARRAPPEND', $key, $path], $valuesAndCb, [$cb]);
         return $this->json(...$args);
     }
 
@@ -2610,7 +2610,7 @@ class Client
         if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
             $cb = \array_pop($itemsAndCb);
         }
-        $args = ['MADD', $key, ...$itemsAndCb, $cb];
+        $args = \array_merge(['MADD', $key], $itemsAndCb, [$cb]);
         return $this->bf(...$args);
     }
 
@@ -2628,7 +2628,7 @@ class Client
         if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
             $cb = \array_pop($itemsAndCb);
         }
-        $args = ['MEXISTS', $key, ...$itemsAndCb, $cb];
+        $args = \array_merge(['MEXISTS', $key], $itemsAndCb, [$cb]);
         return $this->bf(...$args);
     }
 
@@ -2709,7 +2709,7 @@ class Client
         if (!empty($pairsAndCb) && \is_callable(\end($pairsAndCb))) {
             $cb = \array_pop($pairsAndCb);
         }
-        $args = ['INCRBY', $key, ...$pairsAndCb, $cb];
+        $args = \array_merge(['INCRBY', $key], $pairsAndCb, [$cb]);
         return $this->cms(...$args);
     }
 
@@ -2727,7 +2727,7 @@ class Client
         if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
             $cb = \array_pop($itemsAndCb);
         }
-        $args = ['QUERY', $key, ...$itemsAndCb, $cb];
+        $args = \array_merge(['QUERY', $key], $itemsAndCb, [$cb]);
         return $this->cms(...$args);
     }
 
@@ -2847,7 +2847,7 @@ class Client
         if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
             $cb = \array_pop($itemsAndCb);
         }
-        $args = ['ADD', $key, ...$itemsAndCb, $cb];
+        $args = \array_merge(['ADD', $key], $itemsAndCb, [$cb]);
         return $this->topk(...$args);
     }
 
@@ -2867,7 +2867,7 @@ class Client
         if (!empty($pairsAndCb) && \is_callable(\end($pairsAndCb))) {
             $cb = \array_pop($pairsAndCb);
         }
-        $args = ['INCRBY', $key, ...$pairsAndCb, $cb];
+        $args = \array_merge(['INCRBY', $key], $pairsAndCb, [$cb]);
         return $this->topk(...$args);
     }
 
@@ -2885,7 +2885,7 @@ class Client
         if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
             $cb = \array_pop($itemsAndCb);
         }
-        $args = ['QUERY', $key, ...$itemsAndCb, $cb];
+        $args = \array_merge(['QUERY', $key], $itemsAndCb, [$cb]);
         return $this->topk(...$args);
     }
 
@@ -2904,7 +2904,7 @@ class Client
         if (!empty($itemsAndCb) && \is_callable(\end($itemsAndCb))) {
             $cb = \array_pop($itemsAndCb);
         }
-        $args = ['COUNT', $key, ...$itemsAndCb, $cb];
+        $args = \array_merge(['COUNT', $key], $itemsAndCb, [$cb]);
         return $this->topk(...$args);
     }
 
@@ -3665,7 +3665,7 @@ class Client
         if (!empty($args) && \is_callable(\end($args))) {
             $cb = \array_pop($args);
         }
-        $wire = ['CREATE', $index, ...$args, $cb];
+        $wire = \array_merge(['CREATE', $index], $args, [$cb]);
         return $this->ft(...$wire);
     }
 
@@ -3692,7 +3692,7 @@ class Client
         if (!empty($optionsAndCb) && \is_callable(\end($optionsAndCb))) {
             $cb = \array_pop($optionsAndCb);
         }
-        $wire = ['SEARCH', $index, $query, ...$optionsAndCb, $cb];
+        $wire = \array_merge(['SEARCH', $index, $query], $optionsAndCb, [$cb]);
         return $this->ft(...$wire);
     }
 
@@ -3714,7 +3714,7 @@ class Client
         if (!empty($optionsAndCb) && \is_callable(\end($optionsAndCb))) {
             $cb = \array_pop($optionsAndCb);
         }
-        $wire = ['AGGREGATE', $index, $query, ...$optionsAndCb, $cb];
+        $wire = \array_merge(['AGGREGATE', $index, $query], $optionsAndCb, [$cb]);
         return $this->ft(...$wire);
     }
 
@@ -3785,7 +3785,7 @@ class Client
         if (!empty($args) && \is_callable(\end($args))) {
             $cb = \array_pop($args);
         }
-        $wire = ['ALTER', $index, ...$args, $cb];
+        $wire = \array_merge(['ALTER', $index], $args, [$cb]);
         return $this->ft(...$wire);
     }
 
@@ -3806,7 +3806,7 @@ class Client
         if (!empty($args) && \is_callable(\end($args))) {
             $cb = \array_pop($args);
         }
-        $wire = ['CONFIG', ...$args, $cb];
+        $wire = \array_merge(['CONFIG'], $args, [$cb]);
         return $this->ft(...$wire);
     }
 
@@ -3852,7 +3852,7 @@ class Client
         if (!empty($termsAndCb) && \is_callable(\end($termsAndCb))) {
             $cb = \array_pop($termsAndCb);
         }
-        $wire = ['SYNUPDATE', $index, $groupId, ...$termsAndCb, $cb];
+        $wire = \array_merge(['SYNUPDATE', $index, $groupId], $termsAndCb, [$cb]);
         return $this->ft(...$wire);
     }
 
@@ -3872,7 +3872,7 @@ class Client
         if (!empty($args) && \is_callable(\end($args))) {
             $cb = \array_pop($args);
         }
-        $wire = ['PROFILE', $index, ...$args, $cb];
+        $wire = \array_merge(['PROFILE', $index], $args, [$cb]);
         return $this->ft(...$wire);
     }
 

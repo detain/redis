@@ -45,85 +45,93 @@ function ackInvoke(Client $client, $result): void
     $m->invoke($client, $result);
 }
 
-it('keeps the lock and holds callbacks when channels still remain (remaining > 0)', function () {
-    $client = ackClient();
-    ackSet($client, '_subscribe', true);
-    $fired = false;
-    ackSet($client, '_unsubscribeCallbacks', [function () use (&$fired) {
-        $fired = true;
-    }]);
-    ackSet($client, '_queue', [[['SUBSCRIBE', 'a'], time(), null]]);
+final class ClientUnsubscribeAckTest extends \Tests\TestCase
+{
+    public function test_keeps_the_lock_and_holds_callbacks_when_channels_still_remain_remaining_0(): void
+    {
+        $client = ackClient();
+        ackSet($client, '_subscribe', true);
+        $fired = false;
+        ackSet($client, '_unsubscribeCallbacks', [function () use (&$fired) {
+            $fired = true;
+        }]);
+        ackSet($client, '_queue', [[['SUBSCRIBE', 'a'], time(), null]]);
 
-    // Ack: unsubscribed from one channel, 1 still remaining.
-    ackInvoke($client, ['unsubscribe', 'a', 1]);
+        // Ack: unsubscribed from one channel, 1 still remaining.
+        ackInvoke($client, ['unsubscribe', 'a', 1]);
 
-    expect(ackGet($client, '_subscribe'))->toBeTrue();   // lock held
-    expect($fired)->toBeFalse();                          // callbacks NOT fired
-    expect(ackGet($client, '_unsubscribeCallbacks'))->toHaveCount(1); // still queued
-    // Pinned SUBSCRIBE entry untouched.
-    expect(ackGet($client, '_queue'))->toHaveCount(1);
-});
+        $this->assertTrue(ackGet($client, '_subscribe'));   // lock held
+        $this->assertFalse($fired);                          // callbacks NOT fired
+        $this->assertCount(1, ackGet($client, '_unsubscribeCallbacks')); // still queued
+        // Pinned SUBSCRIBE entry untouched.
+        $this->assertCount(1, ackGet($client, '_queue'));
+    }
 
-it('clears the lock, drops the pinned SUBSCRIBE entry, and fires callbacks when remaining is 0', function () {
-    $client = ackClient();
-    ackSet($client, '_subscribe', true);
-    $calls = [];
-    ackSet($client, '_unsubscribeCallbacks', [
-        function ($ok, $c) use (&$calls) {
-            $calls[] = $ok;
-        },
-        function ($ok, $c) use (&$calls) {
-            $calls[] = $ok;
-        },
-    ]);
-    ackSet($client, '_queue', [[['SUBSCRIBE', 'a'], time(), null]]);
+    public function test_clears_the_lock_drops_the_pinned_subscribe_entry_and_fires_callbacks_when_remaining_is_0(): void
+    {
+        $client = ackClient();
+        ackSet($client, '_subscribe', true);
+        $calls = [];
+        ackSet($client, '_unsubscribeCallbacks', [
+            function ($ok, $c) use (&$calls) {
+                $calls[] = $ok;
+            },
+            function ($ok, $c) use (&$calls) {
+                $calls[] = $ok;
+            },
+        ]);
+        ackSet($client, '_queue', [[['SUBSCRIBE', 'a'], time(), null]]);
 
-    ackInvoke($client, ['unsubscribe', 'a', 0]);
+        ackInvoke($client, ['unsubscribe', 'a', 0]);
 
-    expect(ackGet($client, '_subscribe'))->toBeFalse();          // lock cleared
-    expect(ackGet($client, '_queue'))->toBe([]);                 // pinned entry dropped
-    expect($calls)->toBe([true, true]);                          // both callbacks fired with (true, $this)
-    expect(ackGet($client, '_unsubscribeCallbacks'))->toBe([]);  // callbacks cleared
-});
+        $this->assertFalse(ackGet($client, '_subscribe'));          // lock cleared
+        $this->assertSame([], ackGet($client, '_queue'));                 // pinned entry dropped
+        $this->assertSame([true, true], $calls);                          // both callbacks fired with (true, $this)
+        $this->assertSame([], ackGet($client, '_unsubscribeCallbacks'));  // callbacks cleared
+    }
 
-it('treats a missing remaining-count element as 0 (fail-safe teardown)', function () {
-    // Malformed ack with no [2] element: the safe mode is to unlock, not to
-    // stay locked forever.
-    $client = ackClient();
-    ackSet($client, '_subscribe', true);
-    ackSet($client, '_unsubscribeCallbacks', []);
-    ackSet($client, '_queue', [[['PSUBSCRIBE', 'p*'], time(), null]]);
+    public function test_treats_a_missing_remaining_count_element_as_0_fail_safe_teardown(): void
+    {
+        // Malformed ack with no [2] element: the safe mode is to unlock, not to
+        // stay locked forever.
+        $client = ackClient();
+        ackSet($client, '_subscribe', true);
+        ackSet($client, '_unsubscribeCallbacks', []);
+        ackSet($client, '_queue', [[['PSUBSCRIBE', 'p*'], time(), null]]);
 
-    ackInvoke($client, ['unsubscribe']);   // no count element
+        ackInvoke($client, ['unsubscribe']);   // no count element
 
-    expect(ackGet($client, '_subscribe'))->toBeFalse();
-    expect(ackGet($client, '_queue'))->toBe([]);   // PSUBSCRIBE head also dropped
-});
+        $this->assertFalse(ackGet($client, '_subscribe'));
+        $this->assertSame([], ackGet($client, '_queue'));   // PSUBSCRIBE head also dropped
+    }
 
-it('does not drop a non-stream queue head when tearing down', function () {
-    // If the head isn't a SUBSCRIBE/PSUBSCRIBE/SSUBSCRIBE entry it must survive.
-    $client = ackClient();
-    ackSet($client, '_subscribe', true);
-    ackSet($client, '_unsubscribeCallbacks', []);
-    ackSet($client, '_queue', [[['GET', 'somekey'], time(), null]]);
+    public function test_does_not_drop_a_non_stream_queue_head_when_tearing_down(): void
+    {
+        // If the head isn't a SUBSCRIBE/PSUBSCRIBE/SSUBSCRIBE entry it must survive.
+        $client = ackClient();
+        ackSet($client, '_subscribe', true);
+        ackSet($client, '_unsubscribeCallbacks', []);
+        ackSet($client, '_queue', [[['GET', 'somekey'], time(), null]]);
 
-    ackInvoke($client, ['unsubscribe', 'a', 0]);
+        ackInvoke($client, ['unsubscribe', 'a', 0]);
 
-    expect(ackGet($client, '_subscribe'))->toBeFalse();
-    // The GET entry is NOT a stream head, so it stays in the queue.
-    $queue = ackGet($client, '_queue');
-    expect($queue)->toHaveCount(1);
-    expect($queue[array_key_first($queue)][0])->toBe(['GET', 'somekey']);
-});
+        $this->assertFalse(ackGet($client, '_subscribe'));
+        // The GET entry is NOT a stream head, so it stays in the queue.
+        $queue = ackGet($client, '_queue');
+        $this->assertCount(1, $queue);
+        $this->assertSame(['GET', 'somekey'], $queue[array_key_first($queue)][0]);
+    }
 
-it('handles an empty queue gracefully during teardown', function () {
-    $client = ackClient();
-    ackSet($client, '_subscribe', true);
-    ackSet($client, '_unsubscribeCallbacks', []);
-    ackSet($client, '_queue', []);
+    public function test_handles_an_empty_queue_gracefully_during_teardown(): void
+    {
+        $client = ackClient();
+        ackSet($client, '_subscribe', true);
+        ackSet($client, '_unsubscribeCallbacks', []);
+        ackSet($client, '_queue', []);
 
-    ackInvoke($client, ['unsubscribe', 'a', 0]);
+        ackInvoke($client, ['unsubscribe', 'a', 0]);
 
-    expect(ackGet($client, '_subscribe'))->toBeFalse();
-    expect(ackGet($client, '_queue'))->toBe([]);
-});
+        $this->assertFalse(ackGet($client, '_subscribe'));
+        $this->assertSame([], ackGet($client, '_queue'));
+    }
+}

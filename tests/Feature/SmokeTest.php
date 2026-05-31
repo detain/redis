@@ -1,25 +1,30 @@
 <?php
 
-it('round-trips SET and GET via runInWorker', function () {
+final class SmokeTest extends \Tests\RedisTestCase
+{
+    public function test_round_trips_set_and_get_via_runinworker(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->set('pest:smoke:k', 'hello-pest');
+            $redis->get('pest:smoke:k', function ($value) use ($emit) {
+                $emit($value);
+            });
+PHP
+        );
+        $this->assertSame('hello-pest', $result);
+    }
 
-    $result = runInWorker(<<<'PHP'
-        $redis->set('pest:smoke:k', 'hello-pest');
-        $redis->get('pest:smoke:k', function ($value) use ($emit) {
-            $emit($value);
-        });
-    PHP);
-    expect($result)->toBe('hello-pest');
-});
-
-it('routes __call commands through the dispatcher', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $redis->del('pest:smoke:counter');
-        $redis->incr('pest:smoke:counter');
-        $redis->incr('pest:smoke:counter');
-        $redis->incr('pest:smoke:counter', function ($value) use ($emit) {
-            $emit($value);
-        });
-    PHP);
-    expect($result)->toBe(3);
-});
+    public function test_routes_call_commands_through_the_dispatcher(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->del('pest:smoke:counter');
+            $redis->incr('pest:smoke:counter');
+            $redis->incr('pest:smoke:counter');
+            $redis->incr('pest:smoke:counter', function ($value) use ($emit) {
+                $emit($value);
+            });
+PHP
+        );
+        $this->assertSame(3, $result);
+    }
+}

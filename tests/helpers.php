@@ -2,31 +2,15 @@
 
 /*
 |--------------------------------------------------------------------------
-| Test Case binding
+| Global test helpers
 |--------------------------------------------------------------------------
 |
-| Unit tests bind to Tests\TestCase. Feature tests bind to
-| Tests\RedisTestCase, which skips on a missing Redis in its setUp().
+| Free functions shared across the suite. These live in the global namespace
+| and are autoloaded via composer's autoload-dev.files so they resolve
+| unqualified inside test bodies (e.g. coroutineSupported(), runInWorker()).
 |
-*/
-
-uses(\Tests\TestCase::class)->in('Unit');
-uses(\Tests\RedisTestCase::class)->in('Feature');
-
-/*
-|--------------------------------------------------------------------------
-| Backend awareness (dual-engine testing: Dragonfly + Redis)
-|--------------------------------------------------------------------------
-|
-| The same suite runs against both engines, selected per-run by the
-| REDIS_URL + REDIS_BACKEND env pair (see the Makefile targets). These
-| free functions let an individual assertion react to which engine is
-| under test — primarily to skip a case that is a *legitimate,
-| documented* engine behavioural divergence (never a silent skip).
-|
-| Free functions (not RedisTestCase methods) for the same reason
-| runInWorker() is: the project forbids the `@var $this` workaround in
-| Pest closures on PHP 8.1 / phpstan 2.x.
+| Free functions (not RedisTestCase methods) because the project forbids the
+| `@var $this` workaround in test bodies on PHP 8.1 / phpstan 2.x.
 |
 */
 
@@ -34,7 +18,7 @@ uses(\Tests\RedisTestCase::class)->in('Feature');
  * The engine the current run targets, lower-cased.
  *
  * Set by the Makefile (`REDIS_BACKEND=dragonfly|redis`). Falls back to
- * 'unknown' when running pest directly without the env var.
+ * 'unknown' when running phpunit directly without the env var.
  *
  * @return string e.g. 'dragonfly', 'redis', or 'unknown'
  */
@@ -60,14 +44,14 @@ function skipOnBackend(string $backend, string $reason): void
 {
     $backend = strtolower($backend);
     if (currentBackend() === $backend) {
-        // Throw the same exception PHPUnit's markTestSkipped() raises. Using a
-        // free function (not $this->markTestSkipped() / test()->...) keeps this
-        // PHPStan-clean: test() returns a TestCall|HigherOrderTapProxy union on
-        // which markTestSkipped() is not declared, and the project forbids
-        // @var $this PHPDoc in Pest closures. The exception is the public,
-        // documented skip mechanism and PHPUnit reports it as a skip with the
-        // message, so the reason stays visible in the output.
-        throw new \PHPUnit\Framework\SkippedWithMessageException("[{$backend}] {$reason}");
+        // Use the static Assert::markTestSkipped() rather than throwing a skip
+        // exception class directly: the concrete class differs across PHPUnit
+        // majors (SkippedWithMessageException on 10-12, SkippedTestError on 9,
+        // which the PHP 7.x legs resolve), but the static helper exists in all
+        // of them and throws the version-appropriate exception. A free function
+        // (not $this->markTestSkipped()) keeps the skip callable unqualified
+        // from any test body. The reason is surfaced, prefixed with the backend.
+        \PHPUnit\Framework\Assert::markTestSkipped("[{$backend}] {$reason}");
     }
 }
 
@@ -76,15 +60,15 @@ function skipOnBackend(string $backend, string $reason): void
  *
  * For divergences gated on OBSERVED runtime behaviour rather than the backend
  * name (e.g. "skip if the server accepted AUTH with no password set") — the
- * caller decides when to invoke it. Same PHPStan-clean exception mechanism as
- * skipOnBackend() (test()->markTestSkipped() trips method.notFound on Pest's
- * TestCall union, and the project forbids @var $this in closures).
+ * caller decides when to invoke it. Same cross-version skip mechanism as
+ * skipOnBackend(): the static Assert::markTestSkipped() throws the
+ * PHPUnit-major-appropriate skip exception (9 vs 10-12).
  *
  * @param string $reason Why this case is being skipped; surfaced in output.
  */
 function skipTest(string $reason): void
 {
-    throw new \PHPUnit\Framework\SkippedWithMessageException($reason);
+    \PHPUnit\Framework\Assert::markTestSkipped($reason);
 }
 
 /*
@@ -99,10 +83,10 @@ function skipTest(string $reason): void
 | with Workerman's startup banner on stdout.
 |
 | Exposed as a free function instead of a method on RedisTestCase so
-| PHPStan doesn't have to reason about $this inside Pest's bound test
-| closures — on PHP 8.1 / phpstan 2.x the `@var $this` workaround
-| produces "Variable $this in PHPDoc tag @var does not match assigned
-| variable $result" errors. Free function side-steps that entirely.
+| PHPStan doesn't have to reason about $this inside test bodies — on
+| PHP 8.1 / phpstan 2.x the `@var $this` workaround produces "Variable
+| $this in PHPDoc tag @var does not match assigned variable $result"
+| errors. Free function side-steps that entirely.
 |
 | @param  string  $snippet  PHP code (no <?php tag) executed inside the
 |                           subprocess after the worker boots. Has
@@ -183,13 +167,18 @@ function runInWorkerScript(string $scriptPath, string $snippet, int $timeout = 5
     $cmd[] = $runner;
     $cmd[] = 'start';
 
+    // proc_open() accepts an ARRAY command only on PHP 7.4+; on 7.2/7.3 the first
+    // argument must be a string. Build a shell-escaped string so the subprocess
+    // runner works on every supported PHP version.
+    $cmdString = implode(' ', array_map('escapeshellarg', $cmd));
+
     $descriptors = [
         0 => ['pipe', 'r'],
         1 => ['pipe', 'w'],
         2 => ['pipe', 'w'],
         3 => ['pipe', 'w'],
     ];
-    $proc = proc_open($cmd, $descriptors, $pipes, null, $env);
+    $proc = proc_open($cmdString, $descriptors, $pipes, null, $env);
     if (!\is_resource($proc)) {
         throw new \RuntimeException('Could not spawn run-in-worker child');
     }
@@ -214,4 +203,63 @@ function runInWorkerScript(string $scriptPath, string $snippet, int $timeout = 5
         throw new \RuntimeException("Unexpected child result: {$firstLine} stderr={$stderr}");
     }
     return json_decode(substr($firstLine, 3), true);
+}
+
+/**
+ * Whether the coroutine (Revolt-backed) test legs can run.
+ *
+ * Called unqualified inside test bodies, so it must be a global function.
+ *
+ * @return bool True on PHP >= 8.1 with revolt/event-loop installed.
+ */
+function coroutineSupported(): bool
+{
+    return PHP_VERSION_ID >= 80100 && class_exists(\Revolt\EventLoop::class);
+}
+
+/*
+|--------------------------------------------------------------------------
+| PHP 7 polyfills
+|--------------------------------------------------------------------------
+|
+| str_starts_with()/str_contains()/str_ends_with() are PHP 8.0+. The library
+| supports PHP >= 7.2, so the test suite (which uses them) needs these on the
+| 7.x CI legs. Guarded so they are no-ops on PHP 8+.
+|
+*/
+
+if (!function_exists('str_starts_with')) {
+    function str_starts_with(string $haystack, string $needle): bool
+    {
+        return $needle === '' || strncmp($haystack, $needle, strlen($needle)) === 0;
+    }
+}
+
+if (!function_exists('str_contains')) {
+    function str_contains(string $haystack, string $needle): bool
+    {
+        return $needle === '' || strpos($haystack, $needle) !== false;
+    }
+}
+
+if (!function_exists('str_ends_with')) {
+    function str_ends_with(string $haystack, string $needle): bool
+    {
+        return $needle === '' || substr($haystack, -strlen($needle)) === $needle;
+    }
+}
+
+if (!function_exists('array_key_first')) {
+    /**
+     * Polyfill for array_key_first() (PHP 7.3+) so the suite runs on PHP 7.2.
+     * @param array<mixed> $arr
+     * @return mixed first key, or null if empty
+     */
+    function array_key_first(array $arr)
+    {
+        foreach ($arr as $k => $_) {
+            return $k;
+        }
+        return null;
+    }
 }

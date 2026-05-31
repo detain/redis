@@ -14,19 +14,23 @@
 | Keys use a pest:gm: prefix.
 */
 
-it('getMultiple returns the values in order with null for a missing key', function () {
-
-    $result = runInWorker(<<<'PHP'
-        $redis->del('pest:gm:a', 'pest:gm:b', 'pest:gm:missing', function () use ($redis, $emit) {
-            $redis->set('pest:gm:a', 'one', function () use ($redis, $emit) {
-                $redis->set('pest:gm:b', 'two', function () use ($redis, $emit) {
-                    $redis->getMultiple(['pest:gm:a', 'pest:gm:missing', 'pest:gm:b'], function ($values) use ($emit) {
-                        $emit($values);
+final class GetMultipleTest extends \Tests\RedisTestCase
+{
+    public function test_getmultiple_returns_the_values_in_order_with_null_for_a_missing_key(): void
+    {
+        $result = runInWorker(<<<'PHP'
+            $redis->del('pest:gm:a', 'pest:gm:b', 'pest:gm:missing', function () use ($redis, $emit) {
+                $redis->set('pest:gm:a', 'one', function () use ($redis, $emit) {
+                    $redis->set('pest:gm:b', 'two', function () use ($redis, $emit) {
+                        $redis->getMultiple(['pest:gm:a', 'pest:gm:missing', 'pest:gm:b'], function ($values) use ($emit) {
+                            $emit($values);
+                        });
                     });
                 });
             });
-        });
-    PHP);
+PHP
+        );
 
-    expect($result)->toBe(['one', null, 'two']);
-});
+        $this->assertSame(['one', null, 'two'], $result);
+    }
+}
