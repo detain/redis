@@ -36,7 +36,8 @@ final class SScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('string', $result['cursor_type']);
@@ -75,7 +76,8 @@ final class SScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         sort($result);
@@ -102,7 +104,8 @@ final class SScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // COUNT is purely a hint — Dragonfly may return all 30 in one batch.
@@ -131,7 +134,8 @@ final class SScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP, 10);
+PHP
+        , 10);
 
         $this->assertIsArray($result);
         $this->assertSame(150, $result['count']);
@@ -155,7 +159,8 @@ final class SScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP, 10);
+PHP
+        , 10);
 
         $this->assertIsArray($result);
         // limit caps each batch's contribution; the final count may exceed `limit`
@@ -176,7 +181,8 @@ final class SScanTest extends \Tests\RedisTestCase
                     'members'     => $reply['members'] ?? null,
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('0', $result['cursor']);
@@ -199,7 +205,8 @@ final class SScanTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // Redis/Dragonfly replies with an error string; the format callback passes

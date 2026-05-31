@@ -26,7 +26,8 @@ final class PubSubExtraTest extends \Tests\RedisTestCase
             $redis->sPublish('pest:ps:t1:channel', 'hello', function ($n) use ($emit) {
                 $emit($n);
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result);
     }
@@ -43,7 +44,8 @@ final class PubSubExtraTest extends \Tests\RedisTestCase
             \Workerman\Timer::add(0.2, function () use ($pub) {
                 $pub->sPublish('pest:ps:t2:chan', 'sharded-hello');
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertIsArray($result);
         $this->assertSame('pest:ps:t2:chan', $result['channel']);
@@ -60,7 +62,8 @@ final class PubSubExtraTest extends \Tests\RedisTestCase
                     $emit($channels);
                 });
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertIsArray($result);
         $this->assertGreaterThanOrEqual(1, count($result));

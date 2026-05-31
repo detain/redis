@@ -47,7 +47,8 @@ final class FtModuleTest extends \Tests\RedisTestCase
                     }
                 );
             });
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertTrue($result['created']);
         $this->assertTrue($result['altered']);
@@ -60,7 +61,8 @@ final class FtModuleTest extends \Tests\RedisTestCase
             $redis->ftConfig('GET', 'MAXSEARCHRESULTS', function ($cfg) use ($emit) {
                 $emit(['config' => $cfg]);
             });
-        PHP);
+PHP
+        );
 
         // Engine divergence (shape only): Dragonfly replies with a flat
         // [option, value] pair; this Redis/RediSearch build wraps it as a list
@@ -97,7 +99,8 @@ final class FtModuleTest extends \Tests\RedisTestCase
                     }
                 );
             });
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertIsArray($result['tagvals']);
         // Tag values come back lower-cased; order is server-defined, so sort.
@@ -127,7 +130,8 @@ final class FtModuleTest extends \Tests\RedisTestCase
                     }
                 );
             });
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertTrue($result['updated']);
         $this->assertIsArray($result['dump']);
@@ -165,7 +169,8 @@ final class FtModuleTest extends \Tests\RedisTestCase
                     }
                 );
             });
-        PHP, 8);
+PHP
+        , 8);
 
         // FT.PROFILE replies [<search-result>, <profile-info>]. The profile-info
         // half is laid out very differently between Dragonfly and Redis, but the

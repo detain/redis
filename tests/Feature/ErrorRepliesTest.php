@@ -35,7 +35,8 @@ final class ErrorRepliesTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(false, $result['reply']);
         $this->assertNotSame('', $result['error']);
@@ -52,7 +53,8 @@ final class ErrorRepliesTest extends \Tests\RedisTestCase
                     'error' => $client->error(),
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(false, $result['reply']);
         $this->assertNotSame('', $result['error']);
@@ -69,7 +71,8 @@ final class ErrorRepliesTest extends \Tests\RedisTestCase
                     'error' => $client->error(),
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(false, $result['reply']);
         $this->assertNotSame('', $result['error']);
@@ -89,7 +92,8 @@ final class ErrorRepliesTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(false, $result['reply']);
         $this->assertNotSame('', $result['error']);
@@ -106,7 +110,8 @@ final class ErrorRepliesTest extends \Tests\RedisTestCase
                     'error' => $client->error(),
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(false, $result['reply']);
         $this->assertNotSame('', $result['error']);
@@ -133,7 +138,8 @@ final class ErrorRepliesTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(false, $result['bad']);
         $this->assertNotSame('', $result['errAfterFail']);

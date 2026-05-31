@@ -48,7 +48,8 @@ final class ReconnectPrependTest extends \Tests\RedisTestCase
                     $client->close();
                 }
             );
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertFalse($result['ok']);

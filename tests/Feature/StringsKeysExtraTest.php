@@ -32,7 +32,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('v', $result['value']);
@@ -47,7 +48,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
                     $emit($value);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('v', $result);
     }
@@ -62,7 +64,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('v', $result['value']);
@@ -78,7 +81,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
                     $emit($slice);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('hello', $result);
     }
@@ -95,7 +99,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame(1, $result['ok']);
@@ -124,7 +129,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame(0, $result['noReplace']);
@@ -144,7 +150,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result);
     }
@@ -161,7 +168,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame($future, $result);
     }
@@ -178,7 +186,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame($futureMs, $result);
     }
@@ -189,7 +198,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
             $redis->echo('pest-echo-msg', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('pest-echo-msg', $result);
     }
@@ -203,7 +213,8 @@ final class StringsKeysExtraTest extends \Tests\RedisTestCase
             $redis->hello(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
     }

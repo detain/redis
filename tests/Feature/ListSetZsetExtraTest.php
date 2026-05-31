@@ -36,7 +36,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(3, $result['len']);
         $this->assertSame(['a', 'b', 'c'], $result['items']);
@@ -56,7 +57,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('a', $result['head']);
         $this->assertSame('c', $result['tail']);
@@ -77,7 +79,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('b', $result['before']);
         $this->assertTrue($result['ok']);
@@ -96,7 +99,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(3, $result['len']);
         $this->assertSame(['a', 'b', 'c'], $result['items']);
@@ -125,7 +129,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result['removed']);
         $this->assertSame(['a', 'b', 'x'], $result['afterRem']);
@@ -145,7 +150,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('c', $result['moved']);
         $this->assertSame(['c'], $result['dst']);
@@ -167,7 +173,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result['onMissing']);
         $this->assertSame(2, $result['onExisting']);
@@ -199,7 +206,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(3, $result['added']);
         $this->assertSame(3, $result['card']);
@@ -222,7 +230,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertContains($result['rand'], ['a', 'b', 'c']);
         $this->assertContains($result['popped'], ['a', 'b', 'c']);
@@ -244,7 +253,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['moved']);
         $this->assertSame(1, $result['inB']);
@@ -268,7 +278,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['b', 'c'], $result['inter']);
         $this->assertSame(['a', 'b', 'c', 'd'], $result['union']);
@@ -291,7 +302,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result['i']); // {b,c}
         $this->assertSame(4, $result['u']); // {a,b,c,d}
@@ -318,7 +330,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Default ZRANGE is ascending by score.
         $this->assertSame(['a', 'b', 'c'], $result['range']);
@@ -342,7 +355,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['b', 'c'], $result);
     }
@@ -365,7 +379,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result['rankA']);    // lowest score -> rank 0
         $this->assertSame(2, $result['revRankA']); // highest reverse index
@@ -386,7 +401,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result);
     }
@@ -401,7 +417,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // ZINCRBY returns the resulting score as a bulk string.
         $this->assertSame('7.5', $result);
@@ -423,7 +440,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // ZPOPMIN/MAX reply is a flat [member, score] pair.
         $this->assertSame(['a', '1'], $result['min']);
@@ -444,7 +462,8 @@ final class ListSetZsetExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['removed']);
         $this->assertSame(1, $result['card']);

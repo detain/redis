@@ -28,7 +28,8 @@ final class GetMultipleTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['one', null, 'two'], $result);
     }

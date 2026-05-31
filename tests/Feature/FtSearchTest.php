@@ -60,7 +60,8 @@ final class FtSearchTest extends \Tests\RedisTestCase
                     }
                 );
             });
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertTrue($result['created']);
         $this->assertIsArray($result['search']);
@@ -89,7 +90,8 @@ final class FtSearchTest extends \Tests\RedisTestCase
                     }
                 );
             });
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertIsArray($result);
         $this->assertContains('pest:ft:t2:idx', $result);
@@ -114,7 +116,8 @@ final class FtSearchTest extends \Tests\RedisTestCase
                     }
                 );
             });
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertIsArray($result);
         // FT.INFO reply is a flat [name, value, name, value, ...] array. The
@@ -144,7 +147,8 @@ final class FtSearchTest extends \Tests\RedisTestCase
                     }
                 );
             });
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertTrue($result['dropped']);
         $this->assertFalse($result['still_listed']);
@@ -179,7 +183,8 @@ final class FtSearchTest extends \Tests\RedisTestCase
                     }
                 );
             });
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertIsArray($result);
         // First element is the count of result rows. We grouped 3 docs into 2

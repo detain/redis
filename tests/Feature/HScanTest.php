@@ -36,7 +36,8 @@ final class HScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('string', $result['cursor_type']);
@@ -81,7 +82,8 @@ final class HScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('a1', $result);
@@ -108,7 +110,8 @@ final class HScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // COUNT is only a hint. Dragonfly may return all 30 in one batch.
@@ -138,7 +141,8 @@ final class HScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP, 10);
+PHP
+        , 10);
 
         $this->assertIsArray($result);
         $this->assertSame(150, $result['count']);
@@ -163,7 +167,8 @@ final class HScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP, 10);
+PHP
+        , 10);
 
         $this->assertIsArray($result);
         // limit caps each batch's contribution; the final count may exceed `limit`
@@ -184,7 +189,8 @@ final class HScanTest extends \Tests\RedisTestCase
                     'fields'      => $reply['fields'] ?? null,
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('0', $result['cursor']);
@@ -206,7 +212,8 @@ final class HScanTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // The result must NOT be the normal ['cursor' => ..., 'fields' => ...] shape.

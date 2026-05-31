@@ -28,7 +28,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertTrue($result['ok']);
@@ -45,7 +46,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['ok']);
         // Dragonfly serialises object keys alphabetically, so compare unordered.
@@ -62,7 +64,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $decoded = json_decode($result['doc'], true);
         $this->assertIsArray($decoded);
@@ -85,7 +88,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['removed']);
         $this->assertSame(['keep' => 1], json_decode($result['doc'], true));
@@ -103,7 +107,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['removed']);
         $this->assertSame(['keep' => 1], json_decode($result['doc'], true));
@@ -121,7 +126,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result['reply']);
         $this->assertCount(2, $result['reply']);
@@ -145,7 +151,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['ok']);
         $this->assertSame(['q' => 1], json_decode($result['a'], true));
@@ -164,7 +171,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['ok']);
         $decoded = json_decode($result['doc'], true);
@@ -183,7 +191,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // jsonArrAppend returns an array of new lengths per matched path.
         $this->assertSame([4], $result['lengths']);
@@ -200,7 +209,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame([5], $result['len']);
     }
@@ -215,7 +225,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // OBJKEYS over a JSONPath returns an array of arrays (one per match).
         $this->assertIsArray($result['keys']);
@@ -235,7 +246,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame([4], $result['len']);
     }
@@ -254,7 +266,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // JSONPath form returns an array of type names, one per match.
         $this->assertSame(['integer'], $result['n']);
@@ -274,7 +287,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // The increment reply is a JSON-encoded array of new values.
         $this->assertSame([17], json_decode($result['inc'], true));
@@ -294,7 +308,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame([3], $result['lengths']);
         $this->assertSame(['hi!'], json_decode($result['s'], true));
@@ -310,7 +325,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame([5], $result['len']);
     }
@@ -327,7 +343,8 @@ final class JsonTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // After toggling true -> false. Toggle reply is an array of new states (0/1).
         $this->assertSame([0], $result['toggle']);

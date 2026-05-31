@@ -27,7 +27,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->config('GET', 'maxmemory', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // Reply shape: [key, value].
@@ -50,7 +51,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertTrue($result['set']);
@@ -65,7 +67,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->acl('WHOAMI', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         // Stock Redis returns just 'default'; Dragonfly returns 'User is default'.
         // Accept either by asserting the reply contains the user name.
@@ -79,7 +82,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->acl('LIST', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertGreaterThanOrEqual(1, count($result));
@@ -91,7 +95,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->slowLog('LEN', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsInt($result);
         $this->assertGreaterThanOrEqual(0, $result);
@@ -103,7 +108,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->slowLog('GET', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
     }
@@ -114,7 +120,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->slowLog('RESET', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result);
     }
@@ -128,7 +135,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
                     $emit($reply);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsInt($result);
         $this->assertGreaterThan(0, $result);
@@ -140,7 +148,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->command('COUNT', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsInt($result);
         // Any reasonable Redis/Dragonfly build exposes well over a hundred
@@ -154,7 +163,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->command('INFO', 'GET', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertCount(1, $result);
@@ -172,7 +182,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->command(function ($reply) use ($emit) {
                 $emit(['count' => is_array($reply) ? count($reply) : -1]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertGreaterThan(100, $result['count']);
@@ -187,7 +198,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
                     'error' => $client->error(),
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         if ($result['reply'] === false) {
@@ -207,7 +219,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->lastSave(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsInt($result);
         $this->assertGreaterThan(0, $result);
@@ -219,7 +232,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->role(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // First element is the role label: 'master', 'slave', or 'sentinel'.
@@ -233,7 +247,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->replicaOf('NO', 'ONE', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result);
     }
@@ -253,7 +268,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         if ($result['reply'] === false) {
@@ -275,7 +291,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
             $redis->save(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP, 10);
+PHP
+        , 10);
 
         $this->assertTrue($result);
     }
@@ -293,7 +310,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
                     'error' => $client->error(),
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         if ($result['reply'] === false) {
@@ -323,7 +341,8 @@ final class ServerAdminTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         if ($result['reply'] === false && str_contains((string) $result['error'], 'unknown command')) {

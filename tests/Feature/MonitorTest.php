@@ -38,7 +38,8 @@ final class MonitorTest extends \Tests\RedisTestCase
                 $other->set('pest:monitor:t1:b', '2');
                 $other->set('pest:monitor:t1:c', '3');
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertIsArray($result);
         $this->assertGreaterThanOrEqual(3, count($result));
@@ -64,7 +65,8 @@ final class MonitorTest extends \Tests\RedisTestCase
             \Workerman\Timer::add(0.3, function () use ($other) {
                 $other->set('pest:monitor:t2:marker', 'value');
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertIsString($result);
         $this->assertStringContainsString('pest:monitor:t2:marker', $result);

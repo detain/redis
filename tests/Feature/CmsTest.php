@@ -28,7 +28,8 @@ final class CmsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['init']);
         // pear was never added — exact zero (Count-Min never under-counts).
@@ -47,7 +48,8 @@ final class CmsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['init']);
         $this->assertSame([7], $result['query']);
@@ -63,7 +65,8 @@ final class CmsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // CMS.INCRBY returns the post-increment estimate per item, ordered.
         $this->assertSame([3, 5], $result['incr']);
@@ -81,7 +84,8 @@ final class CmsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame([2, 0], $result['query']);
     }
@@ -115,7 +119,8 @@ final class CmsTest extends \Tests\RedisTestCase
                     });
                 }
             );
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['merge']);
         $this->assertSame([10], $result['query']);
@@ -133,7 +138,8 @@ final class CmsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Dragonfly returns CMS.INFO as a flat [name, value, ...] array.
         $this->assertIsArray($result['info']);

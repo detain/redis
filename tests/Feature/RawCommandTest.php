@@ -15,7 +15,8 @@ final class RawCommandTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // SET returns +OK which the client normalizes to true.
@@ -29,7 +30,8 @@ final class RawCommandTest extends \Tests\RedisTestCase
             $redis->rawCommand('PING', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         // PING replies with +PONG (a simple string, NOT the +OK->true normalization
         // path), so the client surfaces the literal 'PONG' string.
@@ -51,7 +53,8 @@ final class RawCommandTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame(true, $result['match']);
@@ -70,7 +73,8 @@ final class RawCommandTest extends \Tests\RedisTestCase
                     'has_error' => $client->error() !== '',
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame(false, $result['reply']);
@@ -92,7 +96,8 @@ final class RawCommandTest extends \Tests\RedisTestCase
                     'message' => $e->getMessage(),
                 ]);
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame(true, $result['threw']);

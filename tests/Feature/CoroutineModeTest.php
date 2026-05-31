@@ -58,7 +58,8 @@ final class CoroutineModeTest extends \Tests\RedisTestCase
                 'del'        => $delK,
                 'get_after'  => $getAft,
             ]);
-        PHP);
+PHP
+        );
 
         // SET's "+OK" status reply is normalised to boolean true by the client.
         $this->assertTrue($result['set']);
@@ -86,7 +87,8 @@ final class CoroutineModeTest extends \Tests\RedisTestCase
             $keys = $redis->scanAll(['match' => 'pest:g8:coro:2:*', 'count' => 100]);
             sort($keys);
             $emit($keys);
-        PHP);
+PHP
+        );
 
         $this->assertSame([
             'pest:g8:coro:2:a',
@@ -116,7 +118,8 @@ final class CoroutineModeTest extends \Tests\RedisTestCase
             ksort($z);
 
             $emit(['h' => $h, 's' => $s, 'z' => $z]);
-        PHP);
+PHP
+        );
 
         $this->assertSame(['f1' => 'v1', 'f2' => 'v2'], $result['h']);
         $this->assertSame(['m1', 'm2'], $result['s']);
@@ -143,7 +146,8 @@ final class CoroutineModeTest extends \Tests\RedisTestCase
             } catch (\Throwable $e) {
                 $emit(['threw' => true, 'class' => get_class($e), 'message' => $e->getMessage()]);
             }
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['threw']);
         $this->assertSame(\Workerman\Redis\Exception::class, $result['class']);

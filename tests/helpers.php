@@ -167,13 +167,18 @@ function runInWorkerScript(string $scriptPath, string $snippet, int $timeout = 5
     $cmd[] = $runner;
     $cmd[] = 'start';
 
+    // proc_open() accepts an ARRAY command only on PHP 7.4+; on 7.2/7.3 the first
+    // argument must be a string. Build a shell-escaped string so the subprocess
+    // runner works on every supported PHP version.
+    $cmdString = implode(' ', array_map('escapeshellarg', $cmd));
+
     $descriptors = [
         0 => ['pipe', 'r'],
         1 => ['pipe', 'w'],
         2 => ['pipe', 'w'],
         3 => ['pipe', 'w'],
     ];
-    $proc = proc_open($cmd, $descriptors, $pipes, null, $env);
+    $proc = proc_open($cmdString, $descriptors, $pipes, null, $env);
     if (!\is_resource($proc)) {
         throw new \RuntimeException('Could not spawn run-in-worker child');
     }
@@ -241,5 +246,20 @@ if (!function_exists('str_ends_with')) {
     function str_ends_with(string $haystack, string $needle): bool
     {
         return $needle === '' || substr($haystack, -strlen($needle)) === $needle;
+    }
+}
+
+if (!function_exists('array_key_first')) {
+    /**
+     * Polyfill for array_key_first() (PHP 7.3+) so the suite runs on PHP 7.2.
+     * @param array<mixed> $arr
+     * @return mixed first key, or null if empty
+     */
+    function array_key_first(array $arr)
+    {
+        foreach ($arr as $k => $_) {
+            return $k;
+        }
+        return null;
     }
 }

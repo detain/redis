@@ -31,7 +31,8 @@ final class UnsubscribeTest extends \Tests\RedisTestCase
                     $emit($pong);
                 });
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertSame('PONG', $result);
     }
@@ -45,7 +46,8 @@ final class UnsubscribeTest extends \Tests\RedisTestCase
                     $emit($ok);
                 });
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertTrue($result);
     }
@@ -62,7 +64,8 @@ final class UnsubscribeTest extends \Tests\RedisTestCase
                     });
                 });
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertSame('ok', $result);
     }
@@ -77,7 +80,8 @@ final class UnsubscribeTest extends \Tests\RedisTestCase
                     $emit($pong);
                 });
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertSame('PONG', $result);
     }
@@ -108,7 +112,8 @@ final class UnsubscribeTest extends \Tests\RedisTestCase
                     }, [], false);
                 }, [], false);
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertTrue($result['lockedDuringPartial']);
         $this->assertTrue($result['pingedAfterFull']);
@@ -122,7 +127,8 @@ final class UnsubscribeTest extends \Tests\RedisTestCase
             $redis->unsubscribe('pest:unsub:t5:chan', function ($ok) use ($emit) {
                 $emit($ok);
             });
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertTrue($result);
     }

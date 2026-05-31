@@ -29,7 +29,8 @@ final class BitmapGeoEvalRoTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result['len']);
         // 0xff AND 0x0f = 0x0f, 0x0f AND 0xff = 0x0f
@@ -44,7 +45,8 @@ final class BitmapGeoEvalRoTest extends \Tests\RedisTestCase
                     $emit($pos);
                 });
             });
-        PHP);
+PHP
+        );
 
         // 0x00 = bits 0-7 clear; 0xff starts at bit 8.
         $this->assertSame(8, $result);
@@ -60,7 +62,8 @@ final class BitmapGeoEvalRoTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame([1], $result['first']);
         $this->assertSame([2], $result['second']);
@@ -76,7 +79,8 @@ final class BitmapGeoEvalRoTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame([7], $result);
     }
@@ -94,7 +98,8 @@ final class BitmapGeoEvalRoTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // 'sf' is ~110km from (-122, 37); 'ny' is ~4100km — well outside 500km.
         $this->assertContains('sf', $result);
@@ -111,7 +116,8 @@ final class BitmapGeoEvalRoTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['sf'], $result);
     }
@@ -127,7 +133,8 @@ final class BitmapGeoEvalRoTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // SF -> LA is ~560 km; both fall within 1000 km of 'sf'.
         $this->assertSame(['la', 'sf'], $result);
@@ -139,7 +146,8 @@ final class BitmapGeoEvalRoTest extends \Tests\RedisTestCase
             $redis->evalRo('return ARGV[1]', ['hello-evalro'], 0, function ($r) use ($emit) {
                 $emit($r);
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('hello-evalro', $result);
     }
@@ -152,7 +160,8 @@ final class BitmapGeoEvalRoTest extends \Tests\RedisTestCase
                     $emit($r);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('hello-shaeval', $result);
     }

@@ -34,7 +34,8 @@ final class HExpireTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame(1, $result[0]);
@@ -55,7 +56,8 @@ final class HExpireTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // hTtl returns an integer per requested field. On Dragonfly the
@@ -80,7 +82,8 @@ final class HExpireTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertCount(2, $result);
@@ -104,7 +107,8 @@ final class HExpireTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Dragonfly currently doesn't implement HPERSIST — accept the unknown-
         // command error path as well as the per-field integer-array reply that
@@ -134,7 +138,8 @@ final class HExpireTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         if (\is_string($result['err']) && $result['err'] !== '') {
             $this->assertStringContainsString('unknown command', $result['err']);
@@ -160,7 +165,8 @@ final class HExpireTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         if (\is_string($result['err']) && $result['err'] !== '') {
             $this->assertStringContainsString('unknown command', $result['err']);

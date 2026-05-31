@@ -19,7 +19,8 @@ final class QuitTest extends \Tests\RedisTestCase
             $redis->quit(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result);
     }
@@ -46,7 +47,8 @@ final class QuitTest extends \Tests\RedisTestCase
                     ]);
                 }, [], false);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertTrue($result['quitting']);

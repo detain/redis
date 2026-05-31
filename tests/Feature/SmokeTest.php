@@ -9,7 +9,8 @@ final class SmokeTest extends \Tests\RedisTestCase
             $redis->get('pest:smoke:k', function ($value) use ($emit) {
                 $emit($value);
             });
-        PHP);
+PHP
+        );
         $this->assertSame('hello-pest', $result);
     }
 
@@ -22,7 +23,8 @@ final class SmokeTest extends \Tests\RedisTestCase
             $redis->incr('pest:smoke:counter', function ($value) use ($emit) {
                 $emit($value);
             });
-        PHP);
+PHP
+        );
         $this->assertSame(3, $result);
     }
 }

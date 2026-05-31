@@ -34,7 +34,8 @@ final class BloomFilterTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['reserve']);
         $this->assertSame(1, $result['added']);
@@ -54,7 +55,8 @@ final class BloomFilterTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['first']);
         $this->assertSame(0, $result['second']);
@@ -72,7 +74,8 @@ final class BloomFilterTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result['exists']);
     }
@@ -87,7 +90,8 @@ final class BloomFilterTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // All three are new — Bloom filter returns 1 per slot.
         $this->assertSame([1, 1, 1], $result['madd']);
@@ -105,7 +109,8 @@ final class BloomFilterTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // foo / bar present, baz absent.
         $this->assertSame([1, 0, 1], $result['mexists']);

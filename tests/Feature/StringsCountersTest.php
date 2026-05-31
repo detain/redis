@@ -34,7 +34,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(3, $result['len1']);
         $this->assertSame(6, $result['len2']);
@@ -49,7 +50,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     $emit($len);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(5, $result);
     }
@@ -65,7 +67,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(11, $result['len']);
         $this->assertSame('Hello Redis', $result['value']);
@@ -79,7 +82,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     $emit($slice);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('Hello', $result);
     }
@@ -94,7 +98,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('old', $result['prev']);
         $this->assertSame('new', $result['now']);
@@ -110,7 +115,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(10, $result['incr']);
         $this->assertSame(7, $result['decr']);
@@ -124,7 +130,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     $emit($value);
                 });
             });
-        PHP);
+PHP
+        );
 
         // INCRBYFLOAT replies with a bulk string, not a RESP integer.
         $this->assertSame('12.5', $result);
@@ -142,7 +149,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['ok']);
         $this->assertSame('v', $result['value']);
@@ -160,7 +168,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['ok']);
         $this->assertGreaterThan(0, $result['pttl']);
@@ -180,7 +189,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['first']);
         $this->assertSame(0, $result['second']);
@@ -199,7 +209,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result['prev']);
         $this->assertSame(1, $result['bit7']);
@@ -216,7 +227,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // MSET returns +OK -> true.
         $this->assertTrue($result['ok']);
@@ -237,7 +249,8 @@ final class StringsCountersTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['first']);
         $this->assertSame(0, $result['second']);

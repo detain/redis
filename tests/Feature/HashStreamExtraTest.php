@@ -33,7 +33,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['added']);
         $this->assertSame('v1', $result['value']);
@@ -51,7 +52,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['ok']);
         // hGetAll() formats the flat reply into an associative array.
@@ -68,7 +70,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // hMGet() combines the field names with the reply values.
         $this->assertSame(['a' => '1', 'b' => '2', 'missing' => null], $result);
@@ -87,7 +90,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['a', 'b'], $result['keys']);
         $this->assertSame(['1', '2'], $result['vals']);
@@ -105,7 +109,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result['deleted']);
         $this->assertSame(1, $result['len']);
@@ -123,7 +128,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // HINCRBY returns an integer; HINCRBYFLOAT a bulk string.
         $this->assertSame(15, $result['int']);
@@ -142,7 +148,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['first']);
         $this->assertSame(0, $result['second']);
@@ -159,7 +166,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(5, $result);
     }
@@ -185,7 +193,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result['len']);
         $this->assertSame('1-1', $result['firstId']);
@@ -205,7 +214,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Reverse order: newest (2-1) comes first.
         $this->assertSame('2-1', $result['firstId']);
@@ -226,7 +236,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // XREAD reply: [[stream-name, [[id, [field, value]], ...]]]
         $this->assertIsArray($result);
@@ -250,7 +261,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['deleted']);
         $this->assertSame(1, $result['len']);
@@ -273,7 +285,8 @@ final class HashStreamExtraTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Three entries trimmed down to one -> two removed.
         $this->assertSame(2, $result['trimmed']);

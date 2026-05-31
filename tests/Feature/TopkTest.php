@@ -28,7 +28,8 @@ final class TopkTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result['reserve']);
         // apple was added so it must be in the top-K (K=3, only one entry).
@@ -45,7 +46,8 @@ final class TopkTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Three slots, three new items, nothing evicted — each element is
         // either null or an empty string per Dragonfly's "no displacement".
@@ -76,7 +78,8 @@ final class TopkTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result['count']);
         $this->assertCount(2, $result['count']);
@@ -100,7 +103,8 @@ final class TopkTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // p, q, r are the heavy hitters; z was never added.
         $this->assertSame([1, 1, 1, 0], $result['query']);
@@ -118,7 +122,8 @@ final class TopkTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // alpha was bumped 12; omega never added.
         $this->assertSame(12, $result['count'][0]);
@@ -137,7 +142,8 @@ final class TopkTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result['list']);
         $this->assertCount(3, $result['list']);
@@ -156,7 +162,8 @@ final class TopkTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result['info']);
         $info = [];

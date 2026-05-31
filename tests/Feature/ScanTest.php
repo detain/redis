@@ -33,7 +33,8 @@ final class ScanTest extends \Tests\RedisTestCase
                 $redis->scan($cursor, ['MATCH' => $prefix.'*'], $loop);
             };
             $redis->scan('0', ['MATCH' => $prefix.'*'], $loop);
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('string', $result['cursor_type']);
@@ -66,7 +67,8 @@ final class ScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertGreaterThanOrEqual(0, $result['count']);
@@ -104,7 +106,8 @@ final class ScanTest extends \Tests\RedisTestCase
                 };
                 $redis->scan('0', ['MATCH' => $prefix.'*', 'TYPE' => 'string'], $loop);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertContains('pest:scan:t3:str', $result);
@@ -131,7 +134,8 @@ final class ScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP, 10);
+PHP
+        , 10);
 
         $this->assertIsArray($result);
         $this->assertSame(200, $result['count']);
@@ -155,7 +159,8 @@ final class ScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP, 10);
+PHP
+        , 10);
 
         $this->assertIsArray($result);
         // limit caps each batch's contribution; the final count may exceed `limit`
@@ -192,7 +197,8 @@ final class ScanTest extends \Tests\RedisTestCase
                 $redis->scan($cursor, ['MATCH' => $prefix.'*'], $loop);
             };
             $redis->scan('0', ['MATCH' => $prefix.'*'], $loop);
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // Redis always eventually returns cursor '0' (string) even when no keys match.
@@ -243,7 +249,8 @@ final class ScanTest extends \Tests\RedisTestCase
                     });
                 });
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // Both cursors must be strings — the format callback casts them.
@@ -260,7 +267,8 @@ final class ScanTest extends \Tests\RedisTestCase
             $redis->scanAll(['MATCH' => $prefix.'*'], function ($all) use ($emit) {
                 $emit($all);
             });
-        PHP);
+PHP
+        );
 
         // scanAll with a no-match pattern must return an empty array, not false.
         $this->assertSame([], $result);
@@ -285,7 +293,8 @@ final class ScanTest extends \Tests\RedisTestCase
                     }
                 });
             }
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // Must have collected at least all 30 keys.
@@ -324,7 +333,8 @@ final class ScanTest extends \Tests\RedisTestCase
                 // BOGUS must be silently dropped; the call must not error out.
                 $redis->scan('0', ['BOGUS' => 'value', 'MATCH' => $prefix.'*'], $loop);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         sort($result);
@@ -358,7 +368,8 @@ final class ScanTest extends \Tests\RedisTestCase
                 // sending to Redis.
                 $redis->scan('0', ['match' => $prefix.'*', 'count' => 25, 'type' => 'string'], $loop);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         sort($result);
@@ -378,7 +389,8 @@ final class ScanTest extends \Tests\RedisTestCase
                     'reply_type' => gettype($reply),
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // The result must NOT be the normal ['cursor' => ..., 'keys' => ...] shape.

@@ -37,7 +37,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('a', $result);
     }
@@ -53,7 +54,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // Reply shape: [key, [popped...]]
@@ -71,7 +73,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result);
     }
@@ -87,7 +90,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('x', $result);
     }
@@ -103,7 +107,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('pest:modern:t5:list', $result[0]);
@@ -119,7 +124,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame([1, 1, 0], $result);
     }
@@ -137,7 +143,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result);
     }
@@ -152,7 +159,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // With count=1 the reply is a one-element array containing a field name.
         $this->assertIsArray($result);
@@ -172,7 +180,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertCount(1, $result);
@@ -191,7 +200,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertCount(3, $result);
@@ -215,7 +225,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['y'], $result);
     }
@@ -235,7 +246,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result);
     }
@@ -255,7 +267,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['x'], $result);
     }
@@ -276,7 +289,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result);
     }
@@ -294,7 +308,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertCount(2, $result);
@@ -317,7 +332,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(3, $result);
     }
@@ -335,7 +351,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('pest:modern:t17:z', $result[0]);
@@ -354,7 +371,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('pest:modern:t18:z', $result[0]);
@@ -374,7 +392,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['c', 'b', 'a'], $result);
     }
@@ -394,7 +413,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result);
     }
@@ -413,7 +433,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(3, $result);
     }
@@ -434,7 +455,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // XAUTOCLAIM returns [next-cursor, claimed-entries, deleted-ids?]
         $this->assertIsArray($result);
@@ -452,7 +474,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertTrue($result);
     }
@@ -476,7 +499,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsString($result['id']);
         $this->assertNotSame('', $result['id']);
@@ -501,7 +525,8 @@ final class ModernCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result);
     }

@@ -33,7 +33,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     $emit($count);
                 });
             });
-        PHP);
+PHP
+        );
 
         // "foobar" has 26 set bits.
         $this->assertSame(26, $result);
@@ -49,7 +50,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // BLPOP returns [key, value]; head of [a,b,c] is "a".
         $this->assertSame(['pest:g7:list:1', 'a'], $result);
@@ -65,7 +67,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['pest:g7:list:2', 'c'], $result);
     }
@@ -82,7 +85,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('z', $result['moved']);
         $this->assertSame(['z'], $result['dst']);
@@ -98,7 +102,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // BZPOPMAX returns [key, member, score].
         $this->assertSame('pest:g7:zset:1', $result[0]);
@@ -116,7 +121,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('pest:g7:zset:2', $result[0]);
         $this->assertSame('a', $result[1]);
@@ -133,7 +139,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['a', 'b', 'c'], $result);
     }
@@ -148,7 +155,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(['c', 'b', 'a'], $result);
     }
@@ -165,7 +173,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['removed']);
         $this->assertSame(['b', 'c'], $result['rest']);
@@ -183,7 +192,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['removed']);
         $this->assertSame(['a', 'c'], $result['rest']);
@@ -203,7 +213,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Only "a" is in both; default aggregate SUM => 1 + 3 = 4. The score comes
         // back as a numeric string / int over the JSON pipe, so compare as a float.
@@ -223,7 +234,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Union of {a,b} and {a,c} => {a,b,c}.
         $this->assertSame(3, $result);
@@ -250,7 +262,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // pfAdd reports 1 when the registers changed.
         $this->assertSame(1, $result['added1']);
@@ -279,7 +292,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result['added']);
         // ~166.27 km between the two cities; engines differ in precision so assert a band.
@@ -306,7 +320,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Both WATCH and UNWATCH reply +OK, normalised to true by the client.
         $this->assertSame(true, $result['watched']);
@@ -346,7 +361,8 @@ final class SurfaceCompletenessTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // Two entries delivered => 2 pending; XACK 1-1 => 1; XCLAIM 2-1 => 1 claimed.
         $this->assertSame(2, $result['pending']);

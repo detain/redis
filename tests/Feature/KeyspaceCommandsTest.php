@@ -37,7 +37,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('string', $result['str']);
         $this->assertSame('list', $result['list']);
@@ -57,7 +58,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // RENAME returns +OK (decoded to true).
         $this->assertTrue($result['ok']);
@@ -85,7 +87,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result['blocked']);
         $this->assertSame(1, $result['ok']);
@@ -106,7 +109,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertGreaterThan(0, $result['before']);
         $this->assertSame(1, $result['persisted']);
@@ -126,7 +130,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['set']);
         $this->assertGreaterThan(0, $result['ttl']);
@@ -145,7 +150,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['set']);
         $this->assertGreaterThan(0, $result['pttl']);
@@ -165,7 +171,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(3, $result);
     }
@@ -184,7 +191,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(2, $result['freed']);
         $this->assertSame(0, $result['stillThere']);
@@ -205,7 +213,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         sort($result);
@@ -230,7 +239,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsString($result['key']);
         $this->assertNotSame('', $result['key']);
@@ -262,7 +272,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // RESTORE returns +OK -> decoded to true.
         $this->assertTrue($result['ok']);
@@ -284,7 +295,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         // A short string lands in embstr/int/raw depending on length & content;
         // 'short' is <= 44 bytes so embstr on stock Redis. Keep tolerant across
@@ -325,7 +337,8 @@ final class KeyspaceCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(1, $result['moved']);
         $this->assertSame(0, $result['inDb0']);

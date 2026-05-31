@@ -29,7 +29,8 @@ final class StreamGuardTest extends \Tests\RedisTestCase
             } catch (\Workerman\Redis\Exception $e) {
                 $emit('threw');
             }
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertSame('threw', $result);
     }
@@ -44,7 +45,8 @@ final class StreamGuardTest extends \Tests\RedisTestCase
             } catch (\Workerman\Redis\Exception $e) {
                 $emit('threw');
             }
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertSame('threw', $result);
     }
@@ -60,7 +62,8 @@ final class StreamGuardTest extends \Tests\RedisTestCase
                     $emit($pong);
                 });
             }, [], false);
-        PHP, 5);
+PHP
+        , 5);
 
         $this->assertSame('PONG', $result);
     }

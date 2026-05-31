@@ -23,7 +23,8 @@ final class ServerCommandsTest extends \Tests\RedisTestCase
             $redis->ping(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame('PONG', $result);
     }
@@ -34,7 +35,8 @@ final class ServerCommandsTest extends \Tests\RedisTestCase
             $redis->info(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsString($result);
         $this->assertGreaterThan(50, strlen($result));
@@ -51,7 +53,8 @@ final class ServerCommandsTest extends \Tests\RedisTestCase
             $redis->info('server', function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsString($result);
         // Both servers expose a version key under the 'server' section.
@@ -74,7 +77,8 @@ final class ServerCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsInt($result);
         $this->assertGreaterThanOrEqual(3, $result);
@@ -86,7 +90,8 @@ final class ServerCommandsTest extends \Tests\RedisTestCase
             $redis->time(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertCount(2, $result);
@@ -108,7 +113,8 @@ final class ServerCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result);
     }
@@ -125,7 +131,8 @@ final class ServerCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result);
     }
@@ -142,7 +149,8 @@ final class ServerCommandsTest extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result);
     }

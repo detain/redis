@@ -42,7 +42,8 @@ final class ConnectionLifecycleTest extends \Tests\RedisTestCase
                     'error' => $client->error(),
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
 
@@ -85,7 +86,8 @@ final class ConnectionLifecycleTest extends \Tests\RedisTestCase
                     'authSet' => $prop->getValue($client),
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
 
@@ -114,7 +116,8 @@ final class ConnectionLifecycleTest extends \Tests\RedisTestCase
                     'db'    => $prop->getValue($client),
                 ]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // SELECT replies +OK, which onMessage normalises to boolean true.
@@ -143,7 +146,8 @@ final class ConnectionLifecycleTest extends \Tests\RedisTestCase
                     ]);
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertFalse($result['reply']);
@@ -171,7 +175,8 @@ final class ConnectionLifecycleTest extends \Tests\RedisTestCase
                     ]);
                 }, [], false);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('PONG', $result['pong']);
@@ -201,7 +206,8 @@ final class ConnectionLifecycleTest extends \Tests\RedisTestCase
                 }
                 $emit(['raw' => $reply, 'map' => $map]);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertIsArray($result['raw']);
@@ -243,7 +249,8 @@ final class ConnectionLifecycleTest extends \Tests\RedisTestCase
                     ]);
                 }, [], false);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame('PONG', $result['pong']);

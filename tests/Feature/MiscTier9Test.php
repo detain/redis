@@ -23,7 +23,8 @@ final class MiscTier9Test extends \Tests\RedisTestCase
             $redis->bgSave(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         // Dragonfly returns +OK (decoded to true). Stock Redis returns the
         // status bulk 'Background saving started'. Accept either.
@@ -36,7 +37,8 @@ final class MiscTier9Test extends \Tests\RedisTestCase
             $redis->moduleList(function ($reply) use ($emit) {
                 $emit($reply);
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // Reply on Dragonfly is a flat list of name/value pairs per module.
@@ -72,7 +74,8 @@ final class MiscTier9Test extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         $this->assertSame(['a', 'b', 'c'], $result);
@@ -102,7 +105,8 @@ final class MiscTier9Test extends \Tests\RedisTestCase
                     });
                 });
             });
-        PHP);
+PHP
+        );
 
         $this->assertIsArray($result);
         // Numeric sort yields [1,2,3,4,5]; LIMIT 1 2 takes 2 elements starting

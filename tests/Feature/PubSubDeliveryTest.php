@@ -41,7 +41,8 @@ final class PubSubDeliveryTest extends \Tests\RedisTestCase
             \Workerman\Timer::add(5, function () use ($fail) {
                 $fail('timeout: no message delivered to subscribe()');
             }, [], false);
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertIsArray($result);
         $this->assertSame('pest:g6:deliver:1', $result['channel']);
@@ -61,7 +62,8 @@ final class PubSubDeliveryTest extends \Tests\RedisTestCase
             \Workerman\Timer::add(5, function () use ($fail) {
                 $fail('timeout: no pmessage delivered to pSubscribe()');
             }, [], false);
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertIsArray($result);
         $this->assertSame('pest:g6:news:*', $result['pattern']);
@@ -75,7 +77,8 @@ final class PubSubDeliveryTest extends \Tests\RedisTestCase
             $redis->publish('pest:g6:count:none', 'into-the-void', function ($n) use ($emit) {
                 $emit($n);
             });
-        PHP);
+PHP
+        );
 
         $this->assertSame(0, $result);
     }
@@ -94,7 +97,8 @@ final class PubSubDeliveryTest extends \Tests\RedisTestCase
             \Workerman\Timer::add(5, function () use ($fail) {
                 $fail('timeout: publish count callback never fired');
             }, [], false);
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertIsInt($result);
         $this->assertGreaterThanOrEqual(1, $result);
@@ -113,7 +117,8 @@ final class PubSubDeliveryTest extends \Tests\RedisTestCase
             \Workerman\Timer::add(5, function () use ($fail) {
                 $fail('timeout: pubSub NUMSUB callback never fired');
             }, [], false);
-        PHP, 8);
+PHP
+        , 8);
 
         // NUMSUB returns a flat [channel, count, ...] array.
         $this->assertIsArray($result);
@@ -135,7 +140,8 @@ final class PubSubDeliveryTest extends \Tests\RedisTestCase
             \Workerman\Timer::add(5, function () use ($fail) {
                 $fail('timeout: pubSub NUMPAT callback never fired');
             }, [], false);
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertIsInt($result);
         $this->assertGreaterThanOrEqual(1, $result);
@@ -155,7 +161,8 @@ final class PubSubDeliveryTest extends \Tests\RedisTestCase
             \Workerman\Timer::add(5, function () use ($fail) {
                 $fail('timeout: no message delivered to multi-channel subscribe()');
             }, [], false);
-        PHP, 8);
+PHP
+        , 8);
 
         $this->assertIsArray($result);
         $this->assertSame('pest:g6:multi:b', $result['channel']);
@@ -188,7 +195,8 @@ final class PubSubDeliveryTest extends \Tests\RedisTestCase
             \Workerman\Timer::add(6, function () use ($fail) {
                 $fail('timeout: unsubscribe-then-publish probe never completed');
             }, [], false);
-        PHP, 9);
+PHP
+        , 9);
 
         $this->assertSame('not received', $result);
     }
